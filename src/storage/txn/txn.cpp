@@ -86,7 +86,7 @@ Status Txn::Append(const String &db_name, const String &table_name, const Shared
     }
     table_store = txn_tables_store_[table_name].get();
 
-    wal_entry_->cmds.push_back(MakeShared<WalCmdAppend>(db_name, table_name, input_block));
+    wal_entry_->cmds_.push_back(MakeShared<WalCmdAppend>(db_name, table_name, input_block));
     UniquePtr<String> err_msg = table_store->Append(input_block);
     if (err_msg.get() != nullptr) {
         return Status(ErrorCode::kError, Move(err_msg));
@@ -106,7 +106,7 @@ Status Txn::Delete(const String &db_name, const String &table_name, const Vector
     }
     table_store = txn_tables_store_[table_name].get();
 
-    wal_entry_->cmds.push_back(MakeShared<WalCmdDelete>(db_name, table_name, row_ids));
+    wal_entry_->cmds_.push_back(MakeShared<WalCmdDelete>(db_name, table_name, row_ids));
     UniquePtr<String> err_msg = table_store->Delete(row_ids);
     if (err_msg.get() != nullptr) {
         return Status(ErrorCode::kError, Move(err_msg));
@@ -144,7 +144,7 @@ Status Txn::CreateDatabase(const String &db_name, ConflictType conflict_type) {
 
     txn_dbs_.insert(db_entry);
     db_names_.insert(db_name);
-    wal_entry_->cmds.push_back(MakeShared<WalCmdCreateDatabase>(db_name));
+    wal_entry_->cmds_.push_back(MakeShared<WalCmdCreateDatabase>(db_name));
     return Status::OK();
 }
 
@@ -174,7 +174,7 @@ Status Txn::DropDatabase(const String &db_name, ConflictType) {
     } else {
         db_names_.insert(db_name);
     }
-    wal_entry_->cmds.push_back(MakeShared<WalCmdDropDatabase>(db_name));
+    wal_entry_->cmds_.push_back(MakeShared<WalCmdDropDatabase>(db_name));
     return Status::OK();
 }
 
@@ -238,7 +238,7 @@ Status Txn::CreateTable(const String &db_name, const SharedPtr<TableDef> &table_
     }
 
     txn_tables_.insert(table_entry);
-    wal_entry_->cmds.push_back(MakeShared<WalCmdCreateTable>(db_name, table_def));
+    wal_entry_->cmds_.push_back(MakeShared<WalCmdCreateTable>(db_name, table_def));
     return Status::OK();
 }
 
@@ -263,7 +263,7 @@ Status Txn::DropTableCollectionByName(const String &db_name, const String &table
         txn_tables_.insert(table_entry);
     }
 
-    wal_entry_->cmds.push_back(MakeShared<WalCmdDropTable>(db_name, table_name));
+    wal_entry_->cmds_.push_back(MakeShared<WalCmdDropTable>(db_name, table_name));
     return Status::OK();
 }
 
@@ -297,7 +297,7 @@ Txn::CreateIndex(const String &db_name, const String &table_name, const SharedPt
     // Create Index Synchronously
     NewCatalog::CreateIndexFile(table_entry, table_store, table_index_entry, begin_ts, GetBufferMgr(), prepare);
 
-    wal_entry_->cmds.push_back(MakeShared<WalCmdCreateIndex>(db_name, table_name, index_def));
+    wal_entry_->cmds_.push_back(MakeShared<WalCmdCreateIndex>(db_name, table_name, index_def));
     return index_status;
 }
 
@@ -341,7 +341,7 @@ Status Txn::DropIndexByName(const String &db_name, const String &table_name, con
         txn_indexes_.emplace(index_name, table_index_entry);
     }
 
-    wal_entry_->cmds.push_back(MakeShared<WalCmdDropIndex>(db_name, table_name, index_name));
+    wal_entry_->cmds_.push_back(MakeShared<WalCmdDropIndex>(db_name, table_name, index_name));
     return index_status;
 }
 
@@ -400,15 +400,15 @@ TxnTimeStamp Txn::Commit() {
         return commit_ts;
     }
 
-    if (wal_entry_->cmds.empty()) {
+    if (wal_entry_->cmds_.empty()) {
         // Don't need to write empty WalEntry (read-only transactions).
         txn_mgr_->Invalidate(commit_ts);
         txn_context_.SetTxnCommitted();
         return commit_ts;
     }
     // Put wal entry to the manager in the same order as commit_ts.
-    wal_entry_->txn_id = txn_id_;
-    wal_entry_->commit_ts = commit_ts;
+    wal_entry_->txn_id_ = txn_id_;
+    wal_entry_->commit_ts_ = commit_ts;
     txn_mgr_->PutWalEntry(wal_entry_);
 
     // Wait until CommitTxnBottom is done.
@@ -499,11 +499,11 @@ void Txn::Rollback() {
     LOG_TRACE(Format("Txn: {} is dropped.", txn_id_));
 }
 
-void Txn::AddWalCmd(const SharedPtr<WalCmd> &cmd) { wal_entry_->cmds.push_back(cmd); }
+void Txn::AddWalCmd(const SharedPtr<WalCmd> &cmd) { wal_entry_->cmds_.push_back(cmd); }
 
 void Txn::Checkpoint(const TxnTimeStamp max_commit_ts, bool is_full_checkpoint) {
     String dir_name = *txn_mgr_->GetBufferMgr()->BaseDir().get() + "/catalog";
     String catalog_path = catalog_->SaveAsFile(dir_name, max_commit_ts, is_full_checkpoint);
-    wal_entry_->cmds.push_back(MakeShared<WalCmdCheckpoint>(max_commit_ts, is_full_checkpoint, catalog_path));
+    wal_entry_->cmds_.push_back(MakeShared<WalCmdCheckpoint>(max_commit_ts, is_full_checkpoint, catalog_path));
 }
 } // namespace infinity
