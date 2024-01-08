@@ -297,7 +297,11 @@ Txn::CreateIndex(const String &db_name, const String &table_name, const SharedPt
     // Create Index Synchronously
     NewCatalog::CreateIndexFile(table_entry, table_store, table_index_entry, begin_ts, GetBufferMgr(), prepare);
 
-    wal_entry_->cmds_.push_back(MakeShared<WalCmdCreateIndex>(db_name, table_name, index_def));
+    if (!prepare) {
+        String index_dir = *table_index_entry->index_dir();
+        wal_entry_->cmds_.push_back(MakeShared<WalCmdCreateIndex>(db_name, table_name, index_def, index_dir));
+    }
+
     return index_status;
 }
 
@@ -316,6 +320,14 @@ Status Txn::CreateIndexDo(const String &db_name, const String &table_name, const
     auto *table_index_entry = txn_index_store.table_index_entry_;
 
     return table_index_entry->CreateIndexDo(table_entry, create_index_idxes);
+}
+
+Status Txn::CreateIndexFinish(const String &db_name, const String &table_name, const SharedPtr<IndexDef> &index_def) {
+    TxnIndexStore &txn_index_store = iter->second;
+    auto *table_index_entry = txn_index_store.table_index_entry_;
+
+
+    AddWalCmd(MakeShared<WalCmdCreateIndex>(db_name, table_name, index_def, String(table_index_entry->index_name())));
 }
 
 Status Txn::DropIndexByName(const String &db_name, const String &table_name, const String &index_name, ConflictType conflict_type) {

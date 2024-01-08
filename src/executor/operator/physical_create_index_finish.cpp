@@ -41,11 +41,10 @@ PhysicalCreateIndexFinish::PhysicalCreateIndexFinish(u64 id,
 void PhysicalCreateIndexFinish::Init() {}
 
 bool PhysicalCreateIndexFinish::Execute(QueryContext *query_context, OperatorState *operator_state) {
-    auto *txn = query_context->GetTxn();
     auto *create_index_finish_op_state = static_cast<CreateIndexFinishOperatorState *>(operator_state);
 
     if (create_index_finish_op_state->input_complete_) {
-        txn->AddWalCmd(MakeShared<WalCmdCreateIndex>(*db_name_, *table_name_, index_def_));
+        txn->AddWalCmd(MakeShared<WalCmdCreateIndex>(*db_name_, *table_name_, index_def_ , String("")));
 
         operator_state->SetComplete();
         return true;

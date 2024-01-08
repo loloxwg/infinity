@@ -156,21 +156,12 @@ void SegmentEntry::DeleteData(u64 txn_id, TxnTimeStamp commit_ts, const HashMap<
     }
 }
 
-SharedPtr<SegmentColumnIndexEntry> SegmentEntry::CreateIndexFile(ColumnIndexEntry *column_index_entry,
-                                                                 SharedPtr<ColumnDef> column_def,
-                                                                 TxnTimeStamp create_ts,
-                                                                 BufferManager *buffer_mgr,
-                                                                 TxnTableStore *txn_store,
-                                                                 bool prepare) {
-    u64 column_id = column_def->id();
-    //    SharedPtr<IndexDef> index_def = index_def_entry->index_def_;
-    const IndexBase *index_base = column_index_entry->index_base_ptr();
-    //    UniquePtr<CreateIndexParam> create_index_param = MakeUnique<CreateIndexParam>(index_base, column_def.get());
-    UniquePtr<CreateIndexParam> create_index_param = SegmentEntry::GetCreateIndexParam(this->row_count_, index_base, column_def.get());
-    SharedPtr<SegmentColumnIndexEntry> segment_column_index_entry =
-        SegmentColumnIndexEntry::NewIndexEntry(column_index_entry, this->segment_id_, create_ts, buffer_mgr, create_index_param.get());
+void SegmentEntry::WriteIndexFile(SharedPtr<ColumnDef> column_def,
+                                  BooleanT prepare,
+                                  u64 column_id,
+                                  const IndexBase *index_base,
+                                  SharedPtr<SegmentColumnIndexEntry> segment_column_index_entry) {
     switch (index_base->index_type_) {
-
         case IndexType::kIVFFlat: {
             if (column_def->type()->type() != LogicalType::kEmbedding) {
                 Error<StorageException>("AnnIVFFlat supports embedding type.");
@@ -184,8 +175,8 @@ SharedPtr<SegmentColumnIndexEntry> SegmentEntry::CreateIndexFile(ColumnIndexEntr
                     auto annivfflat_index = static_cast<AnnIVFFlatIndexData<f32> *>(buffer_handle.GetDataMut());
                     // TODO: How to select training data?
                     Vector<f32> segment_column_data;
-                    segment_column_data.reserve(this->row_count_ * dimension);
-                    for (const auto &block_entry : this->block_entries_) {
+                    segment_column_data.reserve(this->SegmentEntry::row_count_ * dimension);
+                    for (const auto &block_entry : this->SegmentEntry::block_entries_) {
                         BlockColumnEntry *block_column_entry = block_entry->GetColumnBlockEntry(column_id);
                         BufferHandle block_column_buffer_handle = block_column_entry->buffer()->Load();
                         auto block_column_data_ptr = reinterpret_cast<const float *>(block_column_buffer_handle.GetData());
@@ -197,6 +188,7 @@ SharedPtr<SegmentColumnIndexEntry> SegmentEntry::CreateIndexFile(ColumnIndexEntr
                     SizeT total_row_cnt = segment_column_data.size() / dimension;
                     annivfflat_index->train_centroids(dimension, total_row_cnt, segment_column_data.data());
                     annivfflat_index->insert_data(dimension, total_row_cnt, segment_column_data.data());
+                    segment_column_index_entry->SaveIndexFile();
                     break;
                 }
                 default: {
@@ -217,11 +209,11 @@ SharedPtr<SegmentColumnIndexEntry> SegmentEntry::CreateIndexFile(ColumnIndexEntr
             auto InsertHnsw = [&](auto &hnsw_index) {
                 u32 segment_offset = 0;
                 Vector<u64> row_ids;
-                for (const auto &block_entry : this->block_entries_) {
+                for (const auto &block_entry : this->SegmentEntry::block_entries_) {
                     SizeT block_row_cnt = block_entry->row_count();
 
                     for (SizeT block_offset = 0; block_offset < block_row_cnt; ++block_offset) {
-                        RowID row_id(this->segment_id_, segment_offset + block_offset);
+                        RowID row_id(this->SegmentEntry::segment_id_, segment_offset + block_offset);
                         row_ids.push_back(row_id.ToUint64());
                     }
                     segment_offset += DEFAULT_BLOCK_CAPACITY;
@@ -264,6 +256,7 @@ SharedPtr<SegmentColumnIndexEntry> SegmentEntry::CreateIndexFile(ColumnIndexEntr
                                         static_cast<KnnHnsw<float, u64, LVQStore<float, i8, LVQIPCache<float, i8>>, LVQIPDist<float, i8>> *>(
                                             buffer_handle.GetDataMut());
                                     InsertHnsw(hnsw_index);
+                                    segment_column_index_entry->SaveIndexFile();
                                     break;
                                 }
                                 case MetricType::kMerticL2: {
@@ -271,6 +264,7 @@ SharedPtr<SegmentColumnIndexEntry> SegmentEntry::CreateIndexFile(ColumnIndexEntr
                                         static_cast<KnnHnsw<float, u64, LVQStore<float, i8, LVQL2Cache<float, i8>>, LVQL2Dist<float, i8>> *>(
                                             buffer_handle.GetDataMut());
                                     InsertHnsw(hnsw_index);
+                                    segment_column_index_entry->SaveIndexFile();
                                     break;
                                 }
                                 default: {
@@ -301,6 +295,25 @@ SharedPtr<SegmentColumnIndexEntry> SegmentEntry::CreateIndexFile(ColumnIndexEntr
             LOG_ERROR(*err_msg);
             Error<StorageException>(*err_msg);
         }
+    }
+}
+
+SharedPtr<SegmentColumnIndexEntry> SegmentEntry::CreateIndexFile(ColumnIndexEntry *column_index_entry,
+                                                                 SharedPtr<ColumnDef> column_def,
+                                                                 TxnTimeStamp create_ts,
+                                                                 BufferManager *buffer_mgr,
+                                                                 TxnTableStore *txn_store,
+                                                                 BooleanT prepare,
+                                                                 BooleanT is_replay) {
+    u64 column_id = column_def->id();
+    //    SharedPtr<IndexDef> index_def = index_def_entry->index_def_;
+    const IndexBase *index_base = column_index_entry->index_base_ptr();
+    //    UniquePtr<CreateIndexParam> create_index_param = MakeUnique<CreateIndexParam>(index_base, column_def.get());
+    UniquePtr<CreateIndexParam> create_index_param = SegmentEntry::GetCreateIndexParam(this->row_count_, index_base, column_def.get());
+    SharedPtr<SegmentColumnIndexEntry> segment_column_index_entry =
+        SegmentColumnIndexEntry::NewIndexEntry(column_index_entry, this->segment_id_, create_ts, buffer_mgr, create_index_param.get());
+    if (is_replay == false) {
+        WriteIndexFile(column_def, prepare, column_id, index_base, segment_column_index_entry);
     }
     txn_store->CreateIndexFile(column_index_entry->table_index_entry(), column_id, this->segment_id_, segment_column_index_entry);
     return segment_column_index_entry;

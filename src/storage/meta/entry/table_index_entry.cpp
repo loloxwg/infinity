@@ -59,9 +59,11 @@ TableIndexEntry::TableIndexEntry(const SharedPtr<IndexDef> &index_def,
         if (index_base->index_type_ == IndexType::kIRSFullText) {
             index_info_map.emplace(column_id, std::static_pointer_cast<IndexFullText>(index_base));
         } else {
-            SharedPtr<String> column_index_path = MakeShared<String>(Format("{}/{}", *index_dir_, index_base->column_names_[0]));
+            SharedPtr<String> column_index_dir = MakeShared<String>(Format("{}/{}", *index_dir_, index_base->column_names_[0]));
+
+
             UniquePtr<ColumnIndexEntry> column_index_entry =
-                ColumnIndexEntry::NewColumnIndexEntry(index_base, column_id, this, txn_id, column_index_path, begin_ts);
+                ColumnIndexEntry::NewColumnIndexEntry(index_base, column_id, this, txn_id, column_index_dir, begin_ts);
             column_index_map_[column_id] = Move(column_index_entry);
         }
     }
@@ -79,6 +81,7 @@ TableIndexEntry::TableIndexEntry(TableIndexMeta *table_index_meta, u64 txn_id, T
 UniquePtr<TableIndexEntry>
 TableIndexEntry::NewTableIndexEntry(const SharedPtr<IndexDef> &index_def, TableIndexMeta *table_index_meta, u64 txn_id, TxnTimeStamp begin_ts) {
     SharedPtr<String> index_dir = DetermineIndexDir(*table_index_meta->GetTableEntry()->TableEntryDir(), *index_def->index_name_);
+
     return MakeUnique<TableIndexEntry>(index_def, table_index_meta, index_dir, txn_id, begin_ts);
 }
 

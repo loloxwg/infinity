@@ -270,8 +270,9 @@ void NewCatalog::CreateIndexFile(TableEntry *table_entry,
                                  TableIndexEntry *table_index_entry,
                                  TxnTimeStamp begin_ts,
                                  BufferManager *buffer_mgr,
-                                 bool prepare) {
-    return table_entry->CreateIndexFile(txn_store, table_index_entry, begin_ts, buffer_mgr, prepare);
+                                 BooleanT prepare,
+                                 BooleanT is_replay) {
+    return table_entry->CreateIndexFile(txn_store, table_index_entry, begin_ts, buffer_mgr, prepare, is_replay);
 }
 
 Status NewCatalog::RemoveIndexEntry(const String &index_name, TableIndexEntry *table_index_entry, u64 txn_id, TxnManager *txn_mgr) {

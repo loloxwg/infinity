@@ -45,6 +45,7 @@ Tuple<TableIndexEntry *, Status> TableIndexMeta::CreateTableIndexEntry(const Sha
                                                                        TxnManager *txn_mgr) {
 
     auto [table_index_entry, status] = CreateTableIndexEntryInternal(index_def, txn_id, begin_ts, txn_mgr);
+
     switch (conflict_type) {
         case ConflictType::kError: {
             return {table_index_entry, status};

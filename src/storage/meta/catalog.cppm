@@ -163,7 +163,9 @@ public:
                                 TableIndexEntry *table_index_entry,
                                 TxnTimeStamp begin_ts,
                                 BufferManager *buffer_mgr,
-                                bool prepare);
+                                BooleanT prepare,
+                                BooleanT is_replay = false
+                                );
 
     static Status RemoveIndexEntry(const String &index_name, TableIndexEntry *table_index_entry, u64 txn_id, TxnManager *txn_mgr);
 

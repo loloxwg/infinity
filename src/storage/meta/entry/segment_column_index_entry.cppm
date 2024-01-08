@@ -51,6 +51,13 @@ public:
 
     Json Serialize();
 
+    void SaveIndexFile() {
+        if (this->buffer_->Save()) {
+            this->buffer_->Sync();
+            this->buffer_->CloseFile();
+        }
+    }
+
     static UniquePtr<SegmentColumnIndexEntry>
     Deserialize(const Json &index_entry_json, ColumnIndexEntry *column_index_entry, BufferManager *buffer_mgr, TableEntry *table_entry);
 
@@ -67,6 +74,8 @@ private:
     void UpdateIndex(TxnTimeStamp commit_ts, FaissIndexPtr *index, BufferManager *buffer_mgr);
 
     bool Flush(TxnTimeStamp checkpoint_ts);
+
+
 
     // Load from disk. Is called by SegmentColumnIndexEntry::Deserialize.
     static UniquePtr<SegmentColumnIndexEntry>

@@ -207,7 +207,8 @@ void TableEntry::CreateIndexFile(void *txn_store,
                                  TableIndexEntry *table_index_entry,
                                  TxnTimeStamp begin_ts,
                                  BufferManager *buffer_mgr,
-                                 bool prepare) {
+                                 BooleanT prepare,
+                                 BooleanT is_replay) {
     IrsIndexEntry *irs_index_entry = table_index_entry->irs_index_entry().get();
     if (irs_index_entry != nullptr) {
 
@@ -226,7 +227,8 @@ void TableEntry::CreateIndexFile(void *txn_store,
             SharedPtr<ColumnDef> column_def = this->columns_[column_id];
             for (const auto &[segment_id, segment_entry] : this->segment_map_) {
                 SharedPtr<SegmentColumnIndexEntry> segment_column_index_entry =
-                    segment_entry->CreateIndexFile(column_index_entry, column_def, begin_ts, buffer_mgr, txn_store_ptr, prepare);
+                    segment_entry->CreateIndexFile(column_index_entry, column_def, begin_ts, buffer_mgr, txn_store_ptr, prepare, is_replay);
+                /// modify catalog
                 column_index_entry->index_by_segment_.emplace(segment_id, segment_column_index_entry);
             }
         } else if (base_entry->entry_type_ == EntryType::kIRSIndex) {

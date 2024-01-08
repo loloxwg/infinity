@@ -156,7 +156,7 @@ Status SegmentColumnIndexEntry::CreateIndexDo(IndexBase *index_base, const Colum
 void SegmentColumnIndexEntry::UpdateIndex(TxnTimeStamp, FaissIndexPtr *, BufferManager *) { Error<NotImplementException>("Not implemented"); }
 
 bool SegmentColumnIndexEntry::Flush(TxnTimeStamp checkpoint_ts) {
-    String &index_name = *this->column_index_entry_->index_dir();
+    String &index_name = *this->column_index_entry_->col_index_dir();
     u64 segment_id = this->segment_id_;
     LOG_TRACE(Format("Segment: {}, Index: {} is being flushing", segment_id, index_name));
     if (this->max_ts_ <= this->checkpoint_ts_ || this->min_ts_ > checkpoint_ts) {
@@ -164,14 +164,6 @@ bool SegmentColumnIndexEntry::Flush(TxnTimeStamp checkpoint_ts) {
                          segment_id,
                          index_name));
         return false;
-    }
-    if (this->buffer_ == nullptr) {
-        LOG_WARN("Index entry is not initialized");
-        return false;
-    }
-    if (this->buffer_->Save()) {
-        this->buffer_->Sync();
-        this->buffer_->CloseFile();
     }
 
     this->checkpoint_ts_ = checkpoint_ts;

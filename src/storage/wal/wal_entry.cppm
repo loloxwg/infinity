@@ -41,6 +41,16 @@ export enum class WalCommandType : i8 {
     DROP_INDEX = 7,
 
     // -----------------------------
+    // INDEX
+    // -----------------------------
+    ADD_TABLE_INDEX = 11,
+    DEL_TABLE_INDEX = 12,
+    ADD_INDEX_ENTRY = 13,
+    DEL_INDEX_ENTRY = 14,
+    ADD_COLUMN_INDEX = 15,
+    ADD_INDEX_BY_SEGMENT_ID = 16,
+
+    // -----------------------------
     // Data
     // -----------------------------
     IMPORT = 20,
@@ -111,8 +121,8 @@ export struct WalCmdCreateTable : public WalCmd {
 };
 
 export struct WalCmdCreateIndex : public WalCmd {
-    WalCmdCreateIndex(String db_name, String table_name, SharedPtr<IndexDef> index_def)
-        : db_name_(Move(db_name)), table_name_(Move(table_name)), index_def_(Move(index_def)) {}
+    WalCmdCreateIndex(String db_name, String table_name, SharedPtr<IndexDef> index_def, String table_index_dir)
+        : db_name_(Move(db_name)), table_name_(Move(table_name)), index_def_(Move(index_def)), table_index_dir_(Move(table_index_dir)) {}
 
     WalCommandType GetType() override { return WalCommandType::CREATE_INDEX; }
 
@@ -125,6 +135,7 @@ export struct WalCmdCreateIndex : public WalCmd {
     String db_name_{};
     String table_name_{};
     SharedPtr<IndexDef> index_def_{};
+    String table_index_dir_{};
 };
 
 export struct WalCmdDropTable : public WalCmd {

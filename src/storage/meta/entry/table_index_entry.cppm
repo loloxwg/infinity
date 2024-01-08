@@ -62,6 +62,7 @@ public:
     inline const IndexDef *index_def() const { return index_def_.get(); }
     const SharedPtr<IrsIndexEntry> &irs_index_entry() const { return irs_index_entry_; }
     HashMap<u64, UniquePtr<ColumnIndexEntry>> &column_index_map() { return column_index_map_; }
+    const SharedPtr<String> index_dir() { return index_dir_; }
 
     Status CreateIndexDo(const TableEntry *table_entry, HashMap<u32, atomic_u64> &create_index_idxes);
 
@@ -75,7 +76,7 @@ private:
     RWMutex rw_locker_{};
     TableIndexMeta *table_index_meta_{};
     const SharedPtr<IndexDef> index_def_{};
-    SharedPtr<String> index_dir_{};
+    SharedPtr<String> index_dir_{}; //
 
     HashMap<u64, UniquePtr<ColumnIndexEntry>> column_index_map_{};
 

@@ -38,7 +38,6 @@ import txn_store;
 import data_access_state;
 import status;
 
-
 import infinity_exception;
 // #include "statement/extra/extra_ddl_info.h"
 
@@ -289,7 +288,7 @@ void WalManager::Checkpoint() {
         txn_mgr = storage_->txn_manager();
         txn = txn_mgr->CreateTxn();
         txn->Begin();
-        LOG_INFO(Format("created txn for checkpoint, txn_id: {}, begin_ts: {}, max_commit_ts {}", txn->TxnID(), txn->BeginTS(), max_commit_ts));
+        LOG_INFO(Format("Created txn for checkpoint, txn_id: {}, begin_ts: {}, max_commit_ts {}", txn->TxnID(), txn->BeginTS(), max_commit_ts));
 
         txn->Checkpoint(max_commit_ts, is_full_checkpoint);
         txn_mgr->CommitTxn(txn);
@@ -655,7 +654,7 @@ void WalManager::WalCmdCreateIndexReplay(const WalCmdCreateIndex &cmd, u64 txn_i
     auto fake_txn = MakeUnique<Txn>(storage_->txn_manager(), storage_->catalog(), txn_id);
     auto table_store = MakeShared<TxnTableStore>(table_entry, fake_txn.get());
 
-    NewCatalog::CreateIndexFile(table_entry, table_store.get(), table_index_entry, commit_ts, storage_->buffer_manager(), false);
+    NewCatalog::CreateIndexFile(table_entry, table_store.get(), table_index_entry, commit_ts, storage_->buffer_manager(), false, true);
     NewCatalog::CommitCreateIndex(table_store->txn_indexes_store_);
     table_index_entry->Commit(commit_ts);
 }
