@@ -28,11 +28,25 @@ import third_party;
 import buffer_manager;
 import txn_state;
 import status;
+import wal;
 import infinity_exception;
 
 namespace infinity {
 
-Tuple<DBEntry *, Status> DBMeta::CreateNewEntry(u64 txn_id, TxnTimeStamp begin_ts, TxnManager *txn_mgr, ConflictType conflic_type) {
+// Use by default
+UniquePtr<DBMeta> DBMeta::NewDBMeta(const SharedPtr<String> &data_dir,
+                                    const SharedPtr<String> &db_name,
+                                    TxnManager *txn_mgr,
+                                    TransactionID txn_id,
+                                    TxnTimeStamp begin_ts,
+                                    bool is_delete) {
+    auto db_meta = MakeUnique<DBMeta>(data_dir, db_name);
+    txn_mgr->GetTxn(txn_id)->AddPhysicalWalOperation(
+        MakeShared<AddDatabaseMetaOperation>(begin_ts, is_delete, *db_meta->db_name_, *db_meta->data_dir_));
+    return db_meta;
+}
+
+Tuple<DBEntry *, Status> DBMeta::CreateNewEntry(TransactionID txn_id, TxnTimeStamp begin_ts, TxnManager *txn_mgr, ConflictType conflict_type) {
     std::unique_lock<std::shared_mutex> rw_locker(this->rw_locker_);
     DBEntry *db_entry_ptr{nullptr};
     //    rw_locker_.lock();
@@ -43,7 +57,8 @@ Tuple<DBEntry *, Status> DBMeta::CreateNewEntry(u64 txn_id, TxnTimeStamp begin_t
         this->entry_list_.emplace_back(std::move(dummy_entry));
 
         // Insert the new db entry
-        UniquePtr<DBEntry> db_entry = MakeUnique<DBEntry>(this->data_dir_, this->db_name_, txn_id, begin_ts);
+        // physical wal log
+        UniquePtr<DBEntry> db_entry = DBEntry::NewDBEntry(this->data_dir_, this->db_name_, txn_mgr, txn_id, begin_ts);
         db_entry_ptr = db_entry.get();
         this->entry_list_.emplace_front(std::move(db_entry));
 
@@ -53,7 +68,8 @@ Tuple<DBEntry *, Status> DBMeta::CreateNewEntry(u64 txn_id, TxnTimeStamp begin_t
         // Already have a db_entry, check if the db_entry is valid here.
         BaseEntry *header_base_entry = this->entry_list_.front().get();
         if (header_base_entry->entry_type_ == EntryType::kDummy) {
-            UniquePtr<DBEntry> db_entry = MakeUnique<DBEntry>(this->data_dir_, this->db_name_, txn_id, begin_ts);
+            // physical wal log
+            UniquePtr<DBEntry> db_entry = DBEntry::NewDBEntry(this->data_dir_, this->db_name_, txn_mgr, txn_id, begin_ts);
             db_entry_ptr = db_entry.get();
             this->entry_list_.emplace_front(std::move(db_entry));
             return {db_entry_ptr, Status::OK()};
@@ -64,12 +80,13 @@ Tuple<DBEntry *, Status> DBMeta::CreateNewEntry(u64 txn_id, TxnTimeStamp begin_t
             if (begin_ts > header_db_entry->commit_ts_) {
                 if (header_db_entry->deleted_) {
                     // No conflict
-                    UniquePtr<DBEntry> db_entry = MakeUnique<DBEntry>(this->data_dir_, this->db_name_, txn_id, begin_ts);
+                    // physical wal log
+                    UniquePtr<DBEntry> db_entry = DBEntry::NewDBEntry(this->data_dir_, this->db_name_, txn_mgr, txn_id, begin_ts);
                     db_entry_ptr = db_entry.get();
                     this->entry_list_.emplace_front(std::move(db_entry));
                     return {db_entry_ptr, Status::OK()};
                 } else {
-                    switch (conflic_type) {
+                    switch (conflict_type) {
                         case ConflictType::kIgnore: {
                             db_entry_ptr = header_db_entry;
                             return {db_entry_ptr, Status::OK()};
@@ -99,7 +116,8 @@ Tuple<DBEntry *, Status> DBMeta::CreateNewEntry(u64 txn_id, TxnTimeStamp begin_t
                     if (header_db_entry->txn_id_ == txn_id) {
                         // Same txn
                         if (header_db_entry->deleted_) {
-                            UniquePtr<DBEntry> db_entry = MakeUnique<DBEntry>(this->data_dir_, this->db_name_, txn_id, begin_ts);
+                            // physical wal log
+                            UniquePtr<DBEntry> db_entry = DBEntry::NewDBEntry(this->data_dir_, this->db_name_, txn_mgr, txn_id, begin_ts);
                             db_entry_ptr = db_entry.get();
                             this->entry_list_.emplace_front(std::move(db_entry));
                             return {db_entry_ptr, Status::OK()};
@@ -128,7 +146,8 @@ Tuple<DBEntry *, Status> DBMeta::CreateNewEntry(u64 txn_id, TxnTimeStamp begin_t
                     this->entry_list_.erase(this->entry_list_.begin());
 
                     // Append new one
-                    UniquePtr<DBEntry> db_entry = MakeUnique<DBEntry>(this->data_dir_, this->db_name_, txn_id, begin_ts);
+                    // physical wal log
+                    UniquePtr<DBEntry> db_entry = DBEntry::NewDBEntry(this->data_dir_, this->db_name_, txn_mgr, txn_id, begin_ts);
                     db_entry_ptr = db_entry.get();
                     this->entry_list_.emplace_front(std::move(db_entry));
                     return {db_entry_ptr, Status::OK()};
@@ -143,7 +162,7 @@ Tuple<DBEntry *, Status> DBMeta::CreateNewEntry(u64 txn_id, TxnTimeStamp begin_t
     }
 }
 
-Tuple<DBEntry *, Status> DBMeta::DropNewEntry(u64 txn_id, TxnTimeStamp begin_ts, TxnManager *) {
+Tuple<DBEntry *, Status> DBMeta::DropNewEntry(TransactionID txn_id, TxnTimeStamp begin_ts, TxnManager *txn_mgr) {
 
     DBEntry *db_entry_ptr{nullptr};
     std::unique_lock<std::shared_mutex> rw_locker(this->rw_locker_);
@@ -170,7 +189,7 @@ Tuple<DBEntry *, Status> DBMeta::DropNewEntry(u64 txn_id, TxnTimeStamp begin_ts,
                 return {nullptr, Status(ErrorCode::kNotFound, std::move(err_msg))};
             }
 
-            UniquePtr<DBEntry> db_entry = MakeUnique<DBEntry>(this->data_dir_, this->db_name_, txn_id, begin_ts);
+            UniquePtr<DBEntry> db_entry = DBEntry::NewDBEntry(this->data_dir_, this->db_name_, txn_mgr, txn_id, begin_ts, true /*is_delete=true*/);
             db_entry_ptr = db_entry.get();
             db_entry_ptr->deleted_ = true;
             this->entry_list_.emplace_front(std::move(db_entry));
@@ -205,7 +224,7 @@ void DBMeta::AddEntry(DBMeta *db_meta, UniquePtr<BaseEntry> db_entry) {
     db_meta->entry_list_.emplace_front(std::move(db_entry));
 }
 
-void DBMeta::DeleteNewEntry(u64 txn_id, TxnManager *) {
+void DBMeta::DeleteNewEntry(TransactionID txn_id, TxnManager *) {
     std::unique_lock<std::shared_mutex> rw_locker(this->rw_locker_);
     if (this->entry_list_.empty()) {
         LOG_TRACE("Empty db entry list.");
@@ -218,7 +237,7 @@ void DBMeta::DeleteNewEntry(u64 txn_id, TxnManager *) {
     this->entry_list_.erase(removed_iter, this->entry_list_.end());
 }
 
-Tuple<DBEntry *, Status> DBMeta::GetEntry(u64 txn_id, TxnTimeStamp begin_ts) {
+Tuple<DBEntry *, Status> DBMeta::GetEntry(TransactionID txn_id, TxnTimeStamp begin_ts) {
     std::shared_lock<std::shared_mutex> r_locker(this->rw_locker_);
     if (this->entry_list_.empty()) {
         UniquePtr<String> err_msg = MakeUnique<String>("Empty db entry list.");
@@ -241,7 +260,7 @@ Tuple<DBEntry *, Status> DBMeta::GetEntry(u64 txn_id, TxnTimeStamp begin_ts) {
                     return {nullptr, Status(ErrorCode::kNotFound, std::move(err_msg))};
                 } else {
                     // check the tables meta
-                    return {(DBEntry*)(db_entry.get()), Status::OK()};
+                    return {(DBEntry *)(db_entry.get()), Status::OK()};
                 }
             }
         } else {
@@ -253,7 +272,7 @@ Tuple<DBEntry *, Status> DBMeta::GetEntry(u64 txn_id, TxnTimeStamp begin_ts) {
                     LOG_ERROR(*err_msg);
                     return {nullptr, Status(ErrorCode::kNotFound, std::move(err_msg))};
                 } else {
-                    return {(DBEntry*)(db_entry.get()), Status::OK()};
+                    return {(DBEntry *)(db_entry.get()), Status::OK()};
                 }
             }
         }

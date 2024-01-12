@@ -37,6 +37,7 @@ import txn_manager;
 import iresearch_datastore;
 import index_base;
 import index_full_text;
+import wal;
 
 namespace infinity {
 
@@ -45,7 +46,7 @@ TableEntry::TableEntry(const SharedPtr<String> &db_entry_dir,
                        const Vector<SharedPtr<ColumnDef>> &columns,
                        TableEntryType table_entry_type,
                        TableMeta *table_meta,
-                       u64 txn_id,
+                       TransactionID txn_id,
                        TxnTimeStamp begin_ts)
     : BaseEntry(EntryType::kTable), table_entry_dir_(MakeShared<String>(fmt::format("{}/{}/txn_{}", *db_entry_dir, *table_collection_name, txn_id))),
       table_name_(std::move(table_collection_name)), columns_(columns), table_entry_type_(table_entry_type), table_meta_(table_meta) {
@@ -56,6 +57,23 @@ TableEntry::TableEntry(const SharedPtr<String> &db_entry_dir,
 
     begin_ts_ = begin_ts;
     txn_id_ = txn_id;
+}
+
+UniquePtr<TableEntry> TableEntry::NewTableEntry(const SharedPtr<String> &db_entry_dir,
+                                                SharedPtr<String> table_collection_name,
+                                                const Vector<SharedPtr<ColumnDef>> &columns,
+                                                TableEntryType table_entry_type,
+                                                TableMeta *table_meta,
+                                                TransactionID txn_id,
+                                                TxnTimeStamp begin_ts,
+                                                TxnManager *txn_mgr,
+                                                bool is_delete) {
+
+    auto table_entry = MakeUnique<TableEntry>(db_entry_dir, table_collection_name, columns, table_entry_type, table_meta, txn_id, begin_ts);
+    auto operation =
+        MakeShared<AddTableEntryOperation>(begin_ts, is_delete, table_meta->db_name(), *table_entry->table_name_, *table_entry->table_entry_dir_);
+    txn_mgr->GetTxn(txn_id)->AddPhysicalWalOperation(operation);
+    return table_entry;
 }
 
 Tuple<TableIndexEntry *, Status> TableEntry::CreateIndex(const SharedPtr<IndexDef> &index_def,
@@ -275,10 +293,10 @@ void TableEntry::CommitAppend(u64 txn_id, TxnTimeStamp commit_ts, const AppendSt
     SizeT row_count = 0;
     for (const auto &range : append_state_ptr->append_ranges_) {
         LOG_TRACE(fmt::format("Commit, segment: {}, block: {} start offset: {}, count: {}",
-                         range.segment_id_,
-                         range.block_id_,
-                         range.start_offset_,
-                         range.row_count_));
+                              range.segment_id_,
+                              range.block_id_,
+                              range.start_offset_,
+                              range.row_count_));
         SegmentEntry *segment_ptr = this->segment_map_[range.segment_id_].get();
         segment_ptr->CommitAppend(txn_id, commit_ts, range.block_id_, range.start_offset_, range.row_count_);
         row_count += range.row_count_;

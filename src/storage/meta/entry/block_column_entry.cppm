@@ -79,7 +79,7 @@ protected:
 
 protected:
     const BlockEntry *block_entry_{nullptr};
-    u64 column_id_{};
+    ColumnID column_id_{};
     SharedPtr<DataType> column_type_{};
     BufferObj *buffer_{};
 

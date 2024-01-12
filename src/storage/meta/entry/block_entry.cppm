@@ -124,7 +124,7 @@ public:
 
     u32 segment_id() const;
 
-    const SharedPtr<String> &base_dir() const { return base_dir_; }
+    const SharedPtr<String> &base_dir() const { return block_dir_; }
 
     BlockColumnEntry *GetColumnBlockEntry(SizeT column_id) const { return columns_[column_id].get(); }
 
@@ -133,9 +133,9 @@ public:
 
     i32 GetAvailableCapacity();
 
-    const String &DirPath() { return *base_dir_; }
+    const String &DirPath() { return *block_dir_; }
 
-    String VersionFilePath() { return LocalFileSystem::ConcatenateFilePath(*base_dir_, BlockVersion::PATH); }
+    String VersionFilePath() { return LocalFileSystem::ConcatenateFilePath(*block_dir_, BlockVersion::PATH); }
 
     const SharedPtr<DataType> GetColumnType(u64 column_id) const;
 
@@ -145,16 +145,13 @@ public:
 
 protected:
     std::shared_mutex rw_locker_{};
-
     const SegmentEntry *segment_entry_{};
 
-    SharedPtr<String> base_dir_{};
+    BlockID block_id_{};
+    SharedPtr<String> block_dir_{};
 
-    u16 block_id_{};
     u16 row_count_{};
     u16 row_capacity_{};
-
-    Vector<UniquePtr<BlockColumnEntry>> columns_;
 
     UniquePtr<BlockVersion> block_version_{};
 
@@ -162,10 +159,13 @@ protected:
     TxnTimeStamp max_row_ts_{0};    // Indicate the max commit_ts which create/update/delete data inside this BlockEntry
     TxnTimeStamp checkpoint_ts_{0}; // replay not set
 
-    u64 using_txn_id_{0}; // Temporarily used to lock the modification to block entry.
+    TransactionID using_txn_id_{0}; // Temporarily used to lock the modification to block entry.
     BufferManager *buffer_{nullptr};
 
     // checkpoint state
     u16 checkpoint_row_count_{0};
+
+    // Column data
+    Vector<UniquePtr<BlockColumnEntry>> columns_;
 };
 } // namespace infinity

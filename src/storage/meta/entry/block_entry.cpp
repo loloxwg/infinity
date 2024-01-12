@@ -109,7 +109,7 @@ void BlockVersion::SaveToFile(const String &version_path) {
 BlockEntry::BlockEntry(const SegmentEntry *segment_entry, u16 block_id, TxnTimeStamp checkpoint_ts, u64 column_count, BufferManager *buffer_mgr)
     : BaseEntry(EntryType::kBlock), segment_entry_(segment_entry), block_id_(block_id), row_count_(0), row_capacity_(DEFAULT_VECTOR_SIZE),
       checkpoint_ts_(checkpoint_ts) {
-    base_dir_ = BlockEntry::DetermineDir(*segment_entry->segment_dir(), block_id);
+    block_dir_ = BlockEntry::DetermineDir(*segment_entry->segment_dir(), block_id);
     columns_.reserve(column_count);
     for (SizeT column_id = 0; column_id < column_count; ++column_id) {
         columns_.emplace_back(BlockColumnEntry::MakeNewBlockColumnEntry(this, column_id, buffer_mgr));
@@ -129,7 +129,7 @@ BlockEntry::BlockEntry(const SegmentEntry *segment_entry,
     : BaseEntry(EntryType::kBlock), segment_entry_(segment_entry), block_id_(block_id), row_count_(row_count_), row_capacity_(DEFAULT_VECTOR_SIZE),
       min_row_ts_(min_row_ts_), max_row_ts_(max_row_ts_), checkpoint_ts_(checkpoint_ts) {
 
-    base_dir_ = BlockEntry::DetermineDir(*segment_entry->segment_dir(), block_id);
+    block_dir_ = BlockEntry::DetermineDir(*segment_entry->segment_dir(), block_id);
 
     columns_.reserve(column_count);
     for (SizeT column_id = 0; column_id < column_count; ++column_id) {
@@ -318,7 +318,7 @@ nlohmann::json BlockEntry::Serialize(TxnTimeStamp) {
     json_res["checkpoint_ts"] = this->checkpoint_ts_;
     json_res["row_count"] = this->checkpoint_row_count_;
     json_res["row_capacity"] = this->row_capacity_;
-    json_res["block_dir"] = *this->base_dir_;
+    json_res["block_dir"] = *this->block_dir_;
     for (const auto &block_column_entry : this->columns_) {
         json_res["columns"].emplace_back(block_column_entry->Serialize());
     }
@@ -332,7 +332,7 @@ UniquePtr<BlockEntry> BlockEntry::Deserialize(const nlohmann::json &block_entry_
     TxnTimeStamp checkpoint_ts = block_entry_json["checkpoint_ts"];
     UniquePtr<BlockEntry> block_entry = MakeUnique<BlockEntry>(segment_entry, block_id, checkpoint_ts, 0, buffer_mgr);
 
-    *block_entry->base_dir_ = block_entry_json["block_dir"];
+    *block_entry->block_dir_ = block_entry_json["block_dir"];
     block_entry->row_capacity_ = block_entry_json["row_capacity"];
     block_entry->row_count_ = block_entry_json["row_count"];
     block_entry->min_row_ts_ = block_entry_json["min_row_ts"];
@@ -372,8 +372,8 @@ void BlockEntry::MergeFrom(BaseEntry &other) {
         Error<StorageException>("MergeFrom requires the same type of BaseEntry");
     }
     // // No locking here since only the load stage needs MergeFrom.
-    if (*this->base_dir_ != *block_entry2->base_dir_) {
-        Error<StorageException>("BlockEntry::MergeFrom requires base_dir_ match");
+    if (*this->block_dir_ != *block_entry2->block_dir_) {
+        Error<StorageException>("BlockEntry::MergeFrom requires block_dir_ match");
     }
     if (this->block_id_ != block_entry2->block_id_) {
         Error<StorageException>("BlockEntry::MergeFrom requires block_id_ match");

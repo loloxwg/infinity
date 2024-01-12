@@ -64,7 +64,7 @@ NewCatalog::NewCatalog(SharedPtr<String> dir, bool create_default_db) : current_
 // it will lose operation
 // use Txn::CreateDatabase instead
 Tuple<DBEntry *, Status>
-NewCatalog::CreateDatabase(const String &db_name, u64 txn_id, TxnTimeStamp begin_ts, TxnManager *txn_mgr, ConflictType conflict_type) {
+NewCatalog::CreateDatabase(const String &db_name, TransactionID txn_id, TxnTimeStamp begin_ts, TxnManager *txn_mgr, ConflictType conflict_type) {
 
     // Check if there is db_meta with the db_name
     DBMeta *db_meta{nullptr};
@@ -83,9 +83,9 @@ NewCatalog::CreateDatabase(const String &db_name, u64 txn_id, TxnTimeStamp begin
         Path catalog_path(*this->current_dir_);
         Path parent_path = catalog_path.parent_path();
         auto db_dir = MakeShared<String>(parent_path.string());
-        UniquePtr<DBMeta> new_db_meta = MakeUnique<DBMeta>(db_dir, MakeShared<String>(db_name));
+        // Physical wal log
+        UniquePtr<DBMeta> new_db_meta = DBMeta::NewDBMeta(db_dir, MakeShared<String>(db_name), txn_mgr, txn_id, begin_ts);
         db_meta = new_db_meta.get();
-
         this->rw_locker_.lock();
         auto db_iter2 = this->databases_.find(db_name);
         if (db_iter2 == this->databases_.end()) {

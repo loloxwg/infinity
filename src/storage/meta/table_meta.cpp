@@ -29,6 +29,7 @@ import third_party;
 import txn_state;
 import txn_manager;
 import buffer_manager;
+import wal;
 
 import third_party;
 import status;
@@ -36,6 +37,18 @@ import infinity_exception;
 
 namespace infinity {
 
+UniquePtr<TableMeta> TableMeta::NewTableMeta(const SharedPtr<String> &db_entry_dir,
+                                             SharedPtr<String> table_name,
+                                             DBEntry *db_entry,
+                                             TxnManager *txn_mgr,
+                                             TransactionID txn_id,
+                                             TxnTimeStamp begin_ts,
+                                             bool is_delete) {
+    auto table_meta = MakeUnique<TableMeta>(db_entry_dir, table_name, db_entry);
+    auto operation = MakeShared<AddTableMetaOperation>(begin_ts, is_delete, db_entry->db_name(), *table_meta->table_name_);
+    txn_mgr->GetTxn(txn_id)->AddPhysicalWalOperation(operation);
+    return table_meta;
+}
 /**
  * @brief Create a new table entry.
  *        LIST: [👇(insert a new).... table_entry2 , table_entry1 , dummy_entry] insert new table entry from front.
@@ -78,6 +91,9 @@ Tuple<TableEntry *, Status> TableMeta::CreateNewEntry(TableEntryType table_entry
         BaseEntry *header_base_entry = this->entry_list_.front().get();
         if (header_base_entry->entry_type_ == EntryType::kDummy) {
             // Dummy entry in the header
+            //            UniquePtr<TableEntry> table_entry =
+            //                MakeUnique<TableEntry>(this->db_entry_dir_, table_collection_name_ptr, columns, table_entry_type, this, txn_id,
+            //                begin_ts);
             UniquePtr<TableEntry> table_entry =
                 MakeUnique<TableEntry>(this->db_entry_dir_, table_collection_name_ptr, columns, table_entry_type, this, txn_id, begin_ts);
             table_entry_ptr = table_entry.get();
@@ -104,8 +120,9 @@ Tuple<TableEntry *, Status> TableMeta::CreateNewEntry(TableEntryType table_entry
                 }
             } else {
                 // Write-Write conflict
-                UniquePtr<String> err_msg = MakeUnique<String>(
-                    fmt::format("Write-write conflict: There is a committed table: {} which is later than current transaction.", table_collection_name));
+                UniquePtr<String> err_msg =
+                    MakeUnique<String>(fmt::format("Write-write conflict: There is a committed table: {} which is later than current transaction.",
+                                                   table_collection_name));
                 LOG_ERROR(*err_msg);
                 return {nullptr, Status(ErrorCode::kWWConflict, std::move(err_msg))};
             }
@@ -304,10 +321,12 @@ Tuple<TableEntry *, Status> TableMeta::GetEntry(u64 txn_id, TxnTimeStamp begin_t
 
 const SharedPtr<String> &TableMeta::db_name_ptr() const { return db_entry_->db_name_ptr(); }
 
+const String &TableMeta::db_name() const { return db_entry_->db_name(); }
+
 SharedPtr<String> TableMeta::ToString() {
     std::shared_lock<std::shared_mutex> r_locker(this->rw_locker_);
-    SharedPtr<String> res =
-        MakeShared<String>(fmt::format("TableMeta, db_entry_dir: {}, table name: {}, entry count: ", *db_entry_dir_, *table_name_, entry_list_.size()));
+    SharedPtr<String> res = MakeShared<String>(
+        fmt::format("TableMeta, db_entry_dir: {}, table name: {}, entry count: ", *db_entry_dir_, *table_name_, entry_list_.size()));
     return res;
 }
 

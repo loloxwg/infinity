@@ -45,8 +45,9 @@ module txn;
 
 namespace infinity {
 
-Txn::Txn(TxnManager *txn_mgr, NewCatalog *catalog, u32 txn_id)
-    : txn_mgr_(txn_mgr), catalog_(catalog), txn_id_(txn_id), wal_entry_(MakeShared<WalEntry>()) {}
+Txn::Txn(TxnManager *txn_mgr, NewCatalog *catalog, TransactionID txn_id)
+    : txn_mgr_(txn_mgr), catalog_(catalog), txn_id_(txn_id), wal_entry_(MakeShared<WalEntry>()),
+      local_physical_wal_entry_(MakeShared<PhysicalWalEntry>()) {}
 
 Tuple<TableEntry *, Status> Txn::GetTableEntry(const String &db_name, const String &table_name) {
     if (db_name_.empty()) {
@@ -513,6 +514,8 @@ void Txn::Rollback() {
 }
 
 void Txn::AddWalCmd(const SharedPtr<WalCmd> &cmd) { wal_entry_->cmds_.push_back(cmd); }
+
+void Txn::AddPhysicalWalOperation(const SharedPtr<PhysicalWalOperation> &operation) { local_physical_wal_entry_->operations().push_back(operation); }
 
 void Txn::Checkpoint(const TxnTimeStamp max_commit_ts, bool is_full_checkpoint) {
     String dir_name = *txn_mgr_->GetBufferMgr()->BaseDir().get() + "/catalog";

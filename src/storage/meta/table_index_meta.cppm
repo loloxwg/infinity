@@ -78,7 +78,6 @@ public:
     String index_name() const { return *index_name_; }
     List <UniquePtr<BaseEntry>> &entry_list() { return entry_list_; }
 private:
-    //    std::shared_mutex rw_locker_{};
     SharedPtr<String> index_name_{};
     TableEntry *table_entry_{};
 

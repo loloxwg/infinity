@@ -33,12 +33,20 @@ class TxnManager;
 
 export struct TableMeta {
 
-friend class DBEntry;
-friend struct NewCatalog;
+    friend class DBEntry;
+    friend struct NewCatalog;
 
 public:
-    inline explicit TableMeta(const SharedPtr<String> &db_entry_dir, SharedPtr<String> name, DBEntry *db_entry)
-        : db_entry_dir_(db_entry_dir), table_name_(std::move(name)), db_entry_(db_entry) {}
+    inline explicit TableMeta(const SharedPtr<String> &db_entry_dir, SharedPtr<String> table_name, DBEntry *db_entry)
+        : db_entry_dir_(db_entry_dir), table_name_(std::move(table_name)), db_entry_(db_entry) {}
+
+    static UniquePtr<TableMeta> NewTableMeta(const SharedPtr<String> &db_entry_dir,
+                                             SharedPtr<String> name,
+                                             DBEntry *db_entry,
+                                             TxnManager *txn_mgr,
+                                             TransactionID txn_id,
+                                             TxnTimeStamp begin_ts,
+                                             bool is_delete = false);
 
     SharedPtr<String> ToString();
 
@@ -50,7 +58,8 @@ public:
 
     [[nodiscard]] const SharedPtr<String> &table_name_ptr() const { return table_name_; }
     [[nodiscard]] const String &table_name() const { return *table_name_; }
-    const SharedPtr<String>& db_name_ptr() const;
+    const SharedPtr<String> &db_name_ptr() const;
+    const String &db_name() const;
 
 private:
     Tuple<TableEntry *, Status> CreateNewEntry(TableEntryType table_entry_type,
