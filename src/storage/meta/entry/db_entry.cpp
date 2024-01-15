@@ -45,16 +45,10 @@ DBEntry::DBEntry(const SharedPtr<String> &data_dir, const SharedPtr<String> &db_
     txn_id_ = txn_id;
 }
 
-UniquePtr<DBEntry> DBEntry::NewDBEntry(const SharedPtr<String> &data_dir,
-                                       const SharedPtr<String> &db_name,
-                                       TxnManager *txn_mgr,
-                                       TransactionID txn_id,
-                                       TxnTimeStamp begin_ts,
-                                       bool is_delete) {
+UniquePtr<DBEntry>
+DBEntry::NewDBEntry(const SharedPtr<String> &data_dir, const SharedPtr<String> &db_name, TransactionID txn_id, TxnTimeStamp begin_ts) {
 
     auto db_entry = MakeUnique<DBEntry>(data_dir, db_name, txn_id, begin_ts);
-    auto operation = MakeShared<AddDatabaseEntryOperation>(begin_ts, is_delete, *db_name, *db_entry->db_entry_dir_);
-    txn_mgr->GetTxn(txn_id)->AddPhysicalWalOperation(operation);
     return db_entry;
 }
 
@@ -80,8 +74,14 @@ Tuple<TableEntry *, Status> DBEntry::CreateTable(TableEntryType table_entry_type
         this->rw_locker_.unlock_shared();
 
         LOG_TRACE(fmt::format("Create new table/collection: {}", table_name));
-        UniquePtr<TableMeta> new_table_meta = TableMeta::NewTableMeta(this->db_entry_dir_, table_collection_name, this, txn_mgr, txn_id, begin_ts);
+        UniquePtr<TableMeta> new_table_meta =
+            TableMeta::NewTableMeta(this->db_entry_dir_, table_collection_name, this, txn_mgr, txn_id, begin_ts, false);
         table_meta = new_table_meta.get();
+
+        if (txn_mgr != nullptr) {
+            auto operation = MakeShared<AddTableMetaOperation>(table_meta);
+            txn_mgr->GetTxn(txn_id)->AddPhysicalWalOperation(operation);
+        }
 
         this->rw_locker_.lock();
         auto table_iter2 = this->tables_.find(table_name);
@@ -95,7 +95,9 @@ Tuple<TableEntry *, Status> DBEntry::CreateTable(TableEntryType table_entry_type
         LOG_TRACE(fmt::format("Add new table entry for {} in new table meta of db_entry {} ", table_name, *this->db_entry_dir_));
     }
 
-    return table_meta->CreateNewEntry(table_entry_type, table_collection_name, columns, txn_id, begin_ts, txn_mgr);
+    auto table_entry = table_meta->CreateNewEntry(table_entry_type, table_collection_name, columns, txn_id, begin_ts, txn_mgr);
+
+    return table_entry;
 }
 
 Tuple<TableEntry *, Status> DBEntry::DropTable(const String &table_collection_name,

@@ -64,7 +64,7 @@ public:
     inline const ColumnIndexEntry *column_index_entry() const { return column_index_entry_; }
 
 private:
-    explicit SegmentColumnIndexEntry(ColumnIndexEntry *column_index_entry, u32 segment_id, BufferObj *buffer);
+    explicit SegmentColumnIndexEntry(ColumnIndexEntry *column_index_entry, SegmentID segment_id, BufferObj *buffer);
 
     void UpdateIndex(TxnTimeStamp commit_ts, FaissIndexPtr *index, BufferManager *buffer_mgr);
 

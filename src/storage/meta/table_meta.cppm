@@ -37,16 +37,16 @@ export struct TableMeta {
     friend struct NewCatalog;
 
 public:
-    inline explicit TableMeta(const SharedPtr<String> &db_entry_dir, SharedPtr<String> table_name, DBEntry *db_entry)
-        : db_entry_dir_(db_entry_dir), table_name_(std::move(table_name)), db_entry_(db_entry) {}
+    inline explicit TableMeta(const SharedPtr<String> &db_entry_dir, const SharedPtr<String> table_name, DBEntry *db_entry)
+        : db_entry_dir_(db_entry_dir), table_name_(table_name), db_entry_(db_entry) {}
 
     static UniquePtr<TableMeta> NewTableMeta(const SharedPtr<String> &db_entry_dir,
-                                             SharedPtr<String> name,
+                                             const SharedPtr<String> &name,
                                              DBEntry *db_entry,
                                              TxnManager *txn_mgr,
                                              TransactionID txn_id,
                                              TxnTimeStamp begin_ts,
-                                             bool is_delete = false);
+                                             bool is_delete);
 
     SharedPtr<String> ToString();
 
@@ -65,16 +65,16 @@ private:
     Tuple<TableEntry *, Status> CreateNewEntry(TableEntryType table_entry_type,
                                                const SharedPtr<String> &table_collection_name,
                                                const Vector<SharedPtr<ColumnDef>> &columns,
-                                               u64 txn_id,
+                                               TransactionID txn_id,
                                                TxnTimeStamp begin_ts,
                                                TxnManager *txn_mgr);
 
     Tuple<TableEntry *, Status>
-    DropNewEntry(u64 txn_id, TxnTimeStamp begin_ts, TxnManager *txn_mgr, const String &table_name, ConflictType conflict_type);
+    DropNewEntry(TransactionID txn_id, TxnTimeStamp begin_ts, TxnManager *txn_mgr, const String &table_name, ConflictType conflict_type);
 
-    void DeleteNewEntry(u64 txn_id, TxnManager *txn_mgr);
+    void DeleteNewEntry(TransactionID txn_id, TxnManager *txn_mgr);
 
-    Tuple<TableEntry *, Status> GetEntry(u64 txn_id, TxnTimeStamp begin_ts);
+    Tuple<TableEntry *, Status> GetEntry(TransactionID txn_id, TxnTimeStamp begin_ts);
 
 private:
     std::shared_mutex rw_locker_{};

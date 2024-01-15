@@ -48,8 +48,9 @@ TableEntry::TableEntry(const SharedPtr<String> &db_entry_dir,
                        TableMeta *table_meta,
                        TransactionID txn_id,
                        TxnTimeStamp begin_ts)
-    : BaseEntry(EntryType::kTable), table_entry_dir_(MakeShared<String>(fmt::format("{}/{}/txn_{}", *db_entry_dir, *table_collection_name, txn_id))),
-      table_name_(std::move(table_collection_name)), columns_(columns), table_entry_type_(table_entry_type), table_meta_(table_meta) {
+    : BaseEntry(EntryType::kTable), table_meta_(table_meta),
+      table_entry_dir_(MakeShared<String>(fmt::format("{}/{}/txn_{}", *db_entry_dir, *table_collection_name, txn_id))),
+      table_name_(std::move(table_collection_name)), columns_(columns), table_entry_type_(table_entry_type) {
     SizeT column_count = columns.size();
     for (SizeT idx = 0; idx < column_count; ++idx) {
         column_name2column_id_[columns[idx]->name()] = idx;
@@ -65,14 +66,9 @@ UniquePtr<TableEntry> TableEntry::NewTableEntry(const SharedPtr<String> &db_entr
                                                 TableEntryType table_entry_type,
                                                 TableMeta *table_meta,
                                                 TransactionID txn_id,
-                                                TxnTimeStamp begin_ts,
-                                                TxnManager *txn_mgr,
-                                                bool is_delete) {
+                                                TxnTimeStamp begin_ts) {
 
     auto table_entry = MakeUnique<TableEntry>(db_entry_dir, table_collection_name, columns, table_entry_type, table_meta, txn_id, begin_ts);
-    auto operation =
-        MakeShared<AddTableEntryOperation>(begin_ts, is_delete, table_meta->db_name(), *table_entry->table_name_, *table_entry->table_entry_dir_);
-    txn_mgr->GetTxn(txn_id)->AddPhysicalWalOperation(operation);
     return table_entry;
 }
 
@@ -212,7 +208,13 @@ void TableEntry::Append(u64 txn_id, void *txn_store, BufferManager *buffer_mgr) 
             if (this->unsealed_segment_ == nullptr || unsealed_segment_->Room() <= 0) {
                 // unsealed_segment_ is unpopulated or full
                 u32 new_segment_id = this->next_segment_id_++;
-                SharedPtr<SegmentEntry> new_segment = SegmentEntry::MakeNewSegmentEntry(this, new_segment_id, buffer_mgr);
+                SharedPtr<SegmentEntry> new_segment = SegmentEntry::NewSegmentEntry(this, new_segment_id, buffer_mgr);
+
+                {
+                    auto operation = MakeShared<AddSegmentEntryOperation>(new_segment.get());
+                    txn_store_ptr->txn_->AddPhysicalWalOperation(operation);
+                }
+
                 this->segment_map_.emplace(new_segment_id, new_segment);
                 this->unsealed_segment_ = new_segment.get();
                 LOG_TRACE(fmt::format("Created a new segment {}", new_segment_id));

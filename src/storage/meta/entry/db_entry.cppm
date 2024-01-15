@@ -33,14 +33,10 @@ class DBEntry : public BaseEntry {
     friend struct NewCatalog;
 
 public:
-    static UniquePtr<DBEntry> NewDBEntry(const SharedPtr<String> &data_dir,
-                                         const SharedPtr<String> &db_name,
-                                         TxnManager *txn_mgr,
-                                         TransactionID txn_id,
-                                         TxnTimeStamp begin_ts,
-                                         bool is_delete = false);
-
     explicit DBEntry(const SharedPtr<String> &data_dir, const SharedPtr<String> &db_name, TransactionID txn_id, TxnTimeStamp begin_ts);
+
+    static UniquePtr<DBEntry>
+    NewDBEntry(const SharedPtr<String> &data_dir, const SharedPtr<String> &db_name, TransactionID txn_id, TxnTimeStamp begin_ts);
 
 public:
     SharedPtr<String> ToString();

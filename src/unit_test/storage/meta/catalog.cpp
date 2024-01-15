@@ -12,6 +12,7 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
+#include "statement/extra/extra_ddl_info.h"
 #include "unit_test/base_test.h"
 
 import infinity_context;
@@ -69,7 +70,7 @@ TEST_F(CatalogTest, simple_test1) {
 
     // create db in empty catalog should be success
     {
-        auto [base_entry, status] = catalog->CreateDatabase("db1", txn1->TxnID(), txn1->BeginTS(), txn_mgr);
+        auto [base_entry, status] = catalog->CreateDatabase("db1", txn1->TxnID(), txn1->BeginTS(), txn_mgr,ConflictType::kError);
         EXPECT_TRUE(status.ok());
         // store this entry
         databases["db1"] = base_entry;

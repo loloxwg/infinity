@@ -59,9 +59,7 @@ public:
                                                TableEntryType table_entry_type,
                                                TableMeta *table_meta,
                                                TransactionID txn_id,
-                                               TxnTimeStamp begin_ts,
-                                               TxnManager *txn_mgr,
-                                               bool is_delete = false);
+                                               TxnTimeStamp begin_ts);
 
 private:
     Tuple<TableIndexEntry *, Status> CreateIndex(const SharedPtr<IndexDef> &index_def,
@@ -150,6 +148,8 @@ public:
     HashMap<String, UniquePtr<TableIndexMeta>> &index_meta_map() { return index_meta_map_; }
 
 protected:
+    TableMeta *table_meta_{};
+
     HashMap<String, ColumnID> column_name2column_id_;
 
     std::shared_mutex rw_locker_{};
@@ -161,8 +161,6 @@ protected:
     Vector<SharedPtr<ColumnDef>> columns_{};
 
     TableEntryType table_entry_type_{TableEntryType::kTableEntry};
-
-    TableMeta *table_meta_{};
 
     // From data table
     Atomic<SizeT> row_count_{};

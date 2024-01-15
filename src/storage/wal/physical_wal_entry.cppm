@@ -58,6 +58,7 @@ export enum class PhysicalWalOperationType : i8 {
 /// class PhysicalWalOperation
 export class PhysicalWalOperation {
 public:
+    PhysicalWalOperation() = default;
     PhysicalWalOperation(TxnTimeStamp begin_ts, bool is_delete) : begin_ts_(begin_ts), is_delete_(is_delete) {}
     virtual ~PhysicalWalOperation() = default;
     virtual auto GetType() -> PhysicalWalOperationType = 0; // This is a pure virtual function
@@ -78,6 +79,7 @@ export class AddDatabaseMetaOperation : public PhysicalWalOperation {
 public:
     explicit AddDatabaseMetaOperation(TxnTimeStamp begin_ts, bool is_delete, String db_name, String data_dir)
         : PhysicalWalOperation(begin_ts, is_delete), db_name_(std::move(db_name)), data_dir_(std::move(data_dir)) {}
+    explicit AddDatabaseMetaOperation(DBMeta *db_meta) : db_meta_(db_meta) {}
     PhysicalWalOperationType GetType() override { return PhysicalWalOperationType::ADD_DATABASE_META; }
     auto operator==(const PhysicalWalOperation &other) const -> bool override {
         const auto *other_cmd = dynamic_cast<const AddDatabaseMetaOperation *>(&other);
@@ -90,6 +92,9 @@ public:
     }
     void WriteAdv(char *&buf) const override;
 
+public:
+    DBMeta *db_meta_{};
+
 private:
     String db_name_{};
     String data_dir_{};
@@ -100,6 +105,7 @@ export class AddTableMetaOperation : public PhysicalWalOperation {
 public:
     explicit AddTableMetaOperation(TxnTimeStamp begin_ts, bool is_delete, String table_name, String db_entry_dir_)
         : PhysicalWalOperation(begin_ts, is_delete), table_name_(std::move(table_name)), db_entry_dir_(std::move(db_entry_dir_)) {}
+    explicit AddTableMetaOperation(TableMeta *table_meta) : table_meta_(table_meta) {}
     PhysicalWalOperationType GetType() override { return PhysicalWalOperationType::ADD_DATABASE_META; }
     auto operator==(const PhysicalWalOperation &other) const -> bool override {
         const auto *other_cmd = dynamic_cast<const AddTableMetaOperation *>(&other);
@@ -112,6 +118,9 @@ public:
     }
     void WriteAdv(char *&buf) const override;
 
+public:
+    TableMeta *table_meta_{};
+
 private:
     String table_name_{};
     String db_entry_dir_{};
@@ -122,6 +131,7 @@ export class AddDatabaseEntryOperation : public PhysicalWalOperation {
 public:
     explicit AddDatabaseEntryOperation(TxnTimeStamp begin_ts, bool is_delete, String db_name, String db_entry_dir)
         : PhysicalWalOperation(begin_ts, is_delete), db_name_(std::move(db_name)), db_entry_dir_(std::move(db_entry_dir)) {}
+    explicit AddDatabaseEntryOperation(DBEntry *db_entry) : db_entry_(db_entry) {}
     PhysicalWalOperationType GetType() override { return PhysicalWalOperationType::ADD_DATABASE_ENTRY; }
     auto operator==(const PhysicalWalOperation &other) const -> bool override {
         const auto *other_cmd = dynamic_cast<const AddDatabaseEntryOperation *>(&other);
@@ -134,6 +144,9 @@ public:
     }
     void WriteAdv(char *&buf) const override;
 
+public:
+    DBEntry *db_entry_{};
+
 private:
     String db_name_{};
     String db_entry_dir_{};
@@ -145,6 +158,7 @@ public:
     explicit AddTableEntryOperation(TxnTimeStamp begin_ts, bool is_delete, String db_name, String table_name, String table_entry_dir)
         : PhysicalWalOperation(begin_ts, is_delete), db_name_(std::move(db_name)), table_name_(std::move(table_name)),
           table_entry_dir_(std::move(table_entry_dir)) {}
+    explicit AddTableEntryOperation(TableEntry *table_entry) : table_entry_(table_entry) {}
     PhysicalWalOperationType GetType() override { return PhysicalWalOperationType::ADD_TABLE_ENTRY; }
     auto operator==(const PhysicalWalOperation &other) const -> bool override {
         const auto *other_cmd = dynamic_cast<const AddTableEntryOperation *>(&other);
@@ -156,6 +170,9 @@ public:
         return total_size;
     }
     void WriteAdv(char *&buf) const override;
+
+public:
+    TableEntry *table_entry_{};
 
 private:
     String db_name_{};
@@ -174,6 +191,7 @@ public:
                                       String segment_dir)
         : PhysicalWalOperation(begin_ts, is_delete), db_name_(std::move(db_name)), table_name_(std::move(table_name)), segment_id_(segment_id),
           segment_dir_(std::move(segment_dir)) {}
+    explicit AddSegmentEntryOperation(SegmentEntry *segment_entry) : segment_entry_(segment_entry) {}
     PhysicalWalOperationType GetType() override { return PhysicalWalOperationType::ADD_SEGMENT_ENTRY; }
     auto operator==(const PhysicalWalOperation &other) const -> bool override {
         const auto *other_cmd = dynamic_cast<const AddSegmentEntryOperation *>(&other);
@@ -186,6 +204,9 @@ public:
         return total_size;
     }
     void WriteAdv(char *&buf) const override;
+
+public:
+    SegmentEntry *segment_entry_{};
 
 private:
     String db_name_{};
@@ -219,6 +240,7 @@ public:
                            u16 row_capacity)
         : PhysicalWalOperation(begin_ts, is_delete), db_name_(std::move(db_name)), table_name_(std::move(table_name)), segment_id_(segment_id),
           block_id_(block_id), block_dir_(std::move(block_dir)), row_count_(row_count), row_capacity_(row_capacity) {}
+    explicit AddBlockEntryOperation(BlockEntry *block_entry) : block_entry_(block_entry) {}
     PhysicalWalOperationType GetType() override { return PhysicalWalOperationType::ADD_BLOCK_ENTRY; }
     auto operator==(const PhysicalWalOperation &other) const -> bool override {
         const auto *other_cmd = dynamic_cast<const AddBlockEntryOperation *>(&other);
@@ -231,6 +253,9 @@ public:
         return total_size;
     }
     void WriteAdv(char *&buf) const override;
+
+public:
+    BlockEntry *block_entry_{};
 
 private:
     String db_name_{};
@@ -249,20 +274,28 @@ private:
 export class AddColumnEntryOperation : public PhysicalWalOperation {
 public:
     // For create
-    AddColumnEntryOperation(TxnTimeStamp begin_ts, bool is_delete, String db_name, String table_name, u32 segment_id, u16 block_id, u64 column_id)
+    explicit AddColumnEntryOperation(TxnTimeStamp begin_ts,
+                                     bool is_delete,
+                                     String db_name,
+                                     String table_name,
+                                     u32 segment_id,
+                                     u16 block_id,
+                                     u64 column_id)
         : PhysicalWalOperation(begin_ts, is_delete), db_name_(std::move(db_name)), table_name_(std::move(table_name)), segment_id_(segment_id),
           block_id_(block_id), column_id_(column_id) {}
     // For update
-    AddColumnEntryOperation(TxnTimeStamp begin_ts,
-                            bool is_delete,
-                            String db_name,
-                            String table_name,
-                            u32 segment_id,
-                            u16 block_id,
-                            u64 column_id,
-                            i32 next_line_idx)
+    explicit AddColumnEntryOperation(TxnTimeStamp begin_ts,
+                                     bool is_delete,
+                                     String db_name,
+                                     String table_name,
+                                     u32 segment_id,
+                                     u16 block_id,
+                                     u64 column_id,
+                                     i32 next_line_idx)
         : PhysicalWalOperation(begin_ts, is_delete), db_name_(std::move(db_name)), table_name_(std::move(table_name)), segment_id_(segment_id),
           block_id_(block_id), column_id_(column_id), next_outline_idx_(next_line_idx) {}
+    explicit AddColumnEntryOperation(BlockColumnEntry *column_entry) : column_entry_(column_entry) {}
+
     PhysicalWalOperationType GetType() override { return PhysicalWalOperationType::ADD_COLUMN_ENTRY; }
     auto operator==(const PhysicalWalOperation &other) const -> bool override {
         const auto *other_cmd = dynamic_cast<const AddColumnEntryOperation *>(&other);
@@ -276,6 +309,9 @@ public:
         return total_size;
     }
     void WriteAdv(char *&buf) const override;
+
+public:
+    BlockColumnEntry *column_entry_{};
 
 private:
     String db_name_{};

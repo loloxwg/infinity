@@ -146,6 +146,9 @@ Status Txn::CreateDatabase(const String &db_name, ConflictType conflict_type) {
     txn_dbs_.insert(db_entry);
     db_names_.insert(db_name);
     wal_entry_->cmds_.push_back(MakeShared<WalCmdCreateDatabase>(db_name));
+
+    auto operation = MakeShared<AddDatabaseEntryOperation>(db_entry);
+    this->AddPhysicalWalOperation(operation);
     return Status::OK();
 }
 
@@ -176,6 +179,8 @@ Status Txn::DropDatabase(const String &db_name, ConflictType) {
         db_names_.insert(db_name);
     }
     wal_entry_->cmds_.push_back(MakeShared<WalCmdDropDatabase>(db_name));
+    auto operation = MakeShared<AddDatabaseEntryOperation>(dropped_db_entry);
+    this->AddPhysicalWalOperation(operation);
     return Status::OK();
 }
 
@@ -240,6 +245,9 @@ Status Txn::CreateTable(const String &db_name, const SharedPtr<TableDef> &table_
 
     txn_tables_.insert(table_entry);
     wal_entry_->cmds_.push_back(MakeShared<WalCmdCreateTable>(db_name, table_def));
+
+    auto operation = MakeShared<AddTableEntryOperation>(table_entry);
+    this->AddPhysicalWalOperation(operation);
     return Status::OK();
 }
 
@@ -265,6 +273,9 @@ Status Txn::DropTableCollectionByName(const String &db_name, const String &table
     }
 
     wal_entry_->cmds_.push_back(MakeShared<WalCmdDropTable>(db_name, table_name));
+
+    auto operation = MakeShared<AddTableEntryOperation>(table_entry);
+    this->AddPhysicalWalOperation(operation);
     return Status::OK();
 }
 

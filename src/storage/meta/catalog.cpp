@@ -39,6 +39,7 @@ import table_detail;
 import index_def;
 import txn_store;
 import data_access_state;
+import wal;
 
 namespace infinity {
 
@@ -84,7 +85,13 @@ NewCatalog::CreateDatabase(const String &db_name, TransactionID txn_id, TxnTimeS
         Path parent_path = catalog_path.parent_path();
         auto db_dir = MakeShared<String>(parent_path.string());
         // Physical wal log
-        UniquePtr<DBMeta> new_db_meta = DBMeta::NewDBMeta(db_dir, MakeShared<String>(db_name), txn_mgr, txn_id, begin_ts);
+        UniquePtr<DBMeta> new_db_meta = DBMeta::NewDBMeta(db_dir, MakeShared<String>(db_name));
+
+        if (txn_mgr != nullptr) {
+            auto operation = MakeShared<AddDatabaseMetaOperation>(new_db_meta.get());
+            txn_mgr->GetTxn(txn_id)->AddPhysicalWalOperation(operation);
+        }
+
         db_meta = new_db_meta.get();
         this->rw_locker_.lock();
         auto db_iter2 = this->databases_.find(db_name);
@@ -97,7 +104,8 @@ NewCatalog::CreateDatabase(const String &db_name, TransactionID txn_id, TxnTimeS
     }
 
     LOG_TRACE(fmt::format("Add new database entry: {}", db_name));
-    return db_meta->CreateNewEntry(txn_id, begin_ts, txn_mgr, conflict_type);
+    auto db_entry = db_meta->CreateNewEntry(txn_id, begin_ts, txn_mgr, conflict_type);
+    return db_entry;
 }
 
 // do not only use this method to drop database
@@ -111,6 +119,10 @@ Tuple<DBEntry *, Status> NewCatalog::DropDatabase(const String &db_name, u64 txn
     DBMeta *db_meta{nullptr};
     if (this->databases_.find(db_name) != this->databases_.end()) {
         db_meta = this->databases_[db_name].get();
+        if (txn_mgr != nullptr) {
+            auto operation = MakeShared<AddDatabaseMetaOperation>(db_meta);
+            txn_mgr->GetTxn(txn_id)->AddPhysicalWalOperation(operation);
+        }
     }
     this->rw_locker_.unlock_shared();
     if (db_meta == nullptr) {
@@ -120,7 +132,8 @@ Tuple<DBEntry *, Status> NewCatalog::DropDatabase(const String &db_name, u64 txn
     }
 
     LOG_TRACE(fmt::format("Drop a database entry {}", db_name));
-    return db_meta->DropNewEntry(txn_id, begin_ts, txn_mgr);
+    auto db_entry = db_meta->DropNewEntry(txn_id, begin_ts, txn_mgr);
+    return db_entry;
 }
 
 Tuple<DBEntry *, Status> NewCatalog::GetDatabase(const String &db_name, u64 txn_id, TxnTimeStamp begin_ts) {

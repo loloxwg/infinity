@@ -144,11 +144,11 @@ public:
 
     // Index Related methods
     Tuple<TableIndexEntry *, Status> CreateIndex(TableEntry *table_entry,
-                                                               const SharedPtr<IndexDef> &index_def,
-                                                               ConflictType conflict_type,
-                                                               u64 txn_id,
-                                                               TxnTimeStamp begin_ts,
-                                                               TxnManager *txn_mgr,
+                                                 const SharedPtr<IndexDef> &index_def,
+                                                 ConflictType conflict_type,
+                                                 u64 txn_id,
+                                                 TxnTimeStamp begin_ts,
+                                                 TxnManager *txn_mgr,
                                                  bool is_replay = false,
                                                  String replay_table_index_dir = "");
 

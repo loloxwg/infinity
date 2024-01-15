@@ -38,15 +38,14 @@ import infinity_exception;
 namespace infinity {
 
 UniquePtr<TableMeta> TableMeta::NewTableMeta(const SharedPtr<String> &db_entry_dir,
-                                             SharedPtr<String> table_name,
+                                             const SharedPtr<String> &table_name,
                                              DBEntry *db_entry,
                                              TxnManager *txn_mgr,
                                              TransactionID txn_id,
                                              TxnTimeStamp begin_ts,
                                              bool is_delete) {
     auto table_meta = MakeUnique<TableMeta>(db_entry_dir, table_name, db_entry);
-    auto operation = MakeShared<AddTableMetaOperation>(begin_ts, is_delete, db_entry->db_name(), *table_meta->table_name_);
-    txn_mgr->GetTxn(txn_id)->AddPhysicalWalOperation(operation);
+
     return table_meta;
 }
 /**
@@ -188,7 +187,7 @@ Tuple<TableEntry *, Status> TableMeta::CreateNewEntry(TableEntryType table_entry
 }
 
 Tuple<TableEntry *, Status>
-TableMeta::DropNewEntry(u64 txn_id, TxnTimeStamp begin_ts, TxnManager *, const String &table_name, ConflictType conflict_type) {
+TableMeta::DropNewEntry(u64 txn_id, TxnTimeStamp begin_ts, TxnManager *txn_mgr, const String &table_name, ConflictType conflict_type) {
 
     TableEntry *table_entry_ptr{nullptr};
 
@@ -222,8 +221,9 @@ TableMeta::DropNewEntry(u64 txn_id, TxnTimeStamp begin_ts, TxnManager *, const S
             }
 
             Vector<SharedPtr<ColumnDef>> dummy_columns;
+
             UniquePtr<TableEntry> table_entry =
-                MakeUnique<TableEntry>(this->db_entry_dir_, this->table_name_, dummy_columns, TableEntryType::kTableEntry, this, txn_id, begin_ts);
+                TableEntry::NewTableEntry(this->db_entry_dir_, this->table_name_, dummy_columns, TableEntryType::kTableEntry, this, txn_id, begin_ts);
             table_entry_ptr = table_entry.get();
             table_entry_ptr->deleted_ = true;
             this->entry_list_.emplace_front(std::move(table_entry));
@@ -248,7 +248,7 @@ TableMeta::DropNewEntry(u64 txn_id, TxnTimeStamp begin_ts, TxnManager *, const S
             // Not same txn, issue WW conflict
             UniquePtr<String> err_msg = MakeUnique<String>(fmt::format("Write-write conflict: There is another uncommitted table entry."));
             LOG_ERROR(*err_msg);
-            return {table_entry_ptr, Status(ErrorCode::kWWConflict, std::move(err_msg))};
+            return {nullptr, Status(ErrorCode::kWWConflict, std::move(err_msg))};
         }
     }
 }

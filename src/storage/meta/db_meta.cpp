@@ -34,15 +34,8 @@ import infinity_exception;
 namespace infinity {
 
 // Use by default
-UniquePtr<DBMeta> DBMeta::NewDBMeta(const SharedPtr<String> &data_dir,
-                                    const SharedPtr<String> &db_name,
-                                    TxnManager *txn_mgr,
-                                    TransactionID txn_id,
-                                    TxnTimeStamp begin_ts,
-                                    bool is_delete) {
+UniquePtr<DBMeta> DBMeta::NewDBMeta(const SharedPtr<String> &data_dir, const SharedPtr<String> &db_name) {
     auto db_meta = MakeUnique<DBMeta>(data_dir, db_name);
-    txn_mgr->GetTxn(txn_id)->AddPhysicalWalOperation(
-        MakeShared<AddDatabaseMetaOperation>(begin_ts, is_delete, *db_meta->db_name_, *db_meta->data_dir_));
     return db_meta;
 }
 
@@ -58,7 +51,7 @@ Tuple<DBEntry *, Status> DBMeta::CreateNewEntry(TransactionID txn_id, TxnTimeSta
 
         // Insert the new db entry
         // physical wal log
-        UniquePtr<DBEntry> db_entry = DBEntry::NewDBEntry(this->data_dir_, this->db_name_, txn_mgr, txn_id, begin_ts);
+        UniquePtr<DBEntry> db_entry = DBEntry::NewDBEntry(this->data_dir_, this->db_name_, txn_id, begin_ts);
         db_entry_ptr = db_entry.get();
         this->entry_list_.emplace_front(std::move(db_entry));
 
@@ -69,7 +62,7 @@ Tuple<DBEntry *, Status> DBMeta::CreateNewEntry(TransactionID txn_id, TxnTimeSta
         BaseEntry *header_base_entry = this->entry_list_.front().get();
         if (header_base_entry->entry_type_ == EntryType::kDummy) {
             // physical wal log
-            UniquePtr<DBEntry> db_entry = DBEntry::NewDBEntry(this->data_dir_, this->db_name_, txn_mgr, txn_id, begin_ts);
+            UniquePtr<DBEntry> db_entry = DBEntry::NewDBEntry(this->data_dir_, this->db_name_, txn_id, begin_ts);
             db_entry_ptr = db_entry.get();
             this->entry_list_.emplace_front(std::move(db_entry));
             return {db_entry_ptr, Status::OK()};
@@ -81,7 +74,7 @@ Tuple<DBEntry *, Status> DBMeta::CreateNewEntry(TransactionID txn_id, TxnTimeSta
                 if (header_db_entry->deleted_) {
                     // No conflict
                     // physical wal log
-                    UniquePtr<DBEntry> db_entry = DBEntry::NewDBEntry(this->data_dir_, this->db_name_, txn_mgr, txn_id, begin_ts);
+                    UniquePtr<DBEntry> db_entry = DBEntry::DBEntry::NewDBEntry(this->data_dir_, this->db_name_, txn_id, begin_ts);
                     db_entry_ptr = db_entry.get();
                     this->entry_list_.emplace_front(std::move(db_entry));
                     return {db_entry_ptr, Status::OK()};
@@ -104,7 +97,7 @@ Tuple<DBEntry *, Status> DBMeta::CreateNewEntry(TransactionID txn_id, TxnTimeSta
                 UniquePtr<String> err_msg =
                     MakeUnique<String>(fmt::format("Write-write conflict: There is a committed database which is later than current transaction."));
                 LOG_ERROR(*err_msg);
-                return {db_entry_ptr, Status(ErrorCode::kWWConflict, std::move(err_msg))};
+                return {nullptr, Status(ErrorCode::kWWConflict, std::move(err_msg))};
             }
         } else {
 
@@ -117,7 +110,7 @@ Tuple<DBEntry *, Status> DBMeta::CreateNewEntry(TransactionID txn_id, TxnTimeSta
                         // Same txn
                         if (header_db_entry->deleted_) {
                             // physical wal log
-                            UniquePtr<DBEntry> db_entry = DBEntry::NewDBEntry(this->data_dir_, this->db_name_, txn_mgr, txn_id, begin_ts);
+                            UniquePtr<DBEntry> db_entry = DBEntry::NewDBEntry(this->data_dir_, this->db_name_, txn_id, begin_ts);
                             db_entry_ptr = db_entry.get();
                             this->entry_list_.emplace_front(std::move(db_entry));
                             return {db_entry_ptr, Status::OK()};
@@ -129,7 +122,7 @@ Tuple<DBEntry *, Status> DBMeta::CreateNewEntry(TransactionID txn_id, TxnTimeSta
                     } else {
                         UniquePtr<String> err_msg = MakeUnique<String>(fmt::format("Write-write conflict: There is a uncommitted transaction."));
                         LOG_ERROR(*err_msg);
-                        return {db_entry_ptr, Status(ErrorCode::kWWConflict, std::move(err_msg))};
+                        return {nullptr, Status(ErrorCode::kWWConflict, std::move(err_msg))};
                     }
                 }
                 case TxnState::kCommitting:
@@ -138,7 +131,7 @@ Tuple<DBEntry *, Status> DBMeta::CreateNewEntry(TransactionID txn_id, TxnTimeSta
                     UniquePtr<String> err_msg = MakeUnique<String>(
                         fmt::format("Write-write conflict: There is a committing/committed database which is later than current transaction."));
                     LOG_ERROR(*err_msg);
-                    return {db_entry_ptr, Status(ErrorCode::kWWConflict, std::move(err_msg))};
+                    return {nullptr, Status(ErrorCode::kWWConflict, std::move(err_msg))};
                 }
                 case TxnState::kRollbacking:
                 case TxnState::kRollbacked: {
@@ -147,7 +140,7 @@ Tuple<DBEntry *, Status> DBMeta::CreateNewEntry(TransactionID txn_id, TxnTimeSta
 
                     // Append new one
                     // physical wal log
-                    UniquePtr<DBEntry> db_entry = DBEntry::NewDBEntry(this->data_dir_, this->db_name_, txn_mgr, txn_id, begin_ts);
+                    UniquePtr<DBEntry> db_entry = DBEntry::NewDBEntry(this->data_dir_, this->db_name_, txn_id, begin_ts);
                     db_entry_ptr = db_entry.get();
                     this->entry_list_.emplace_front(std::move(db_entry));
                     return {db_entry_ptr, Status::OK()};
@@ -189,7 +182,7 @@ Tuple<DBEntry *, Status> DBMeta::DropNewEntry(TransactionID txn_id, TxnTimeStamp
                 return {nullptr, Status(ErrorCode::kNotFound, std::move(err_msg))};
             }
 
-            UniquePtr<DBEntry> db_entry = DBEntry::NewDBEntry(this->data_dir_, this->db_name_, txn_mgr, txn_id, begin_ts, true /*is_delete=true*/);
+            UniquePtr<DBEntry> db_entry = DBEntry::NewDBEntry(this->data_dir_, this->db_name_, txn_id, begin_ts);
             db_entry_ptr = db_entry.get();
             db_entry_ptr->deleted_ = true;
             this->entry_list_.emplace_front(std::move(db_entry));
@@ -214,7 +207,7 @@ Tuple<DBEntry *, Status> DBMeta::DropNewEntry(TransactionID txn_id, TxnTimeStamp
             // Not same txn, issue WW conflict
             UniquePtr<String> err_msg = MakeUnique<String>("Write-write conflict: There is another uncommitted db entry.");
             LOG_ERROR(*err_msg);
-            return {db_entry_ptr, Status(ErrorCode::kWWConflict, std::move(err_msg))};
+            return {nullptr, Status(ErrorCode::kWWConflict, std::move(err_msg))};
         }
     }
 }

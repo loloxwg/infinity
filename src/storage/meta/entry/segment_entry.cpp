@@ -52,12 +52,13 @@ import hnsw_alg;
 import lvq_store;
 import plain_store;
 import segment_iter;
+import wal;
 
 namespace infinity {
 
 SegmentEntry::SegmentEntry(const TableEntry *table_entry) : BaseEntry(EntryType::kSegment), table_entry_(table_entry) {}
 
-SharedPtr<SegmentEntry> SegmentEntry::MakeNewSegmentEntry(const TableEntry *table_entry, u32 segment_id, BufferManager *buffer_mgr) {
+SharedPtr<SegmentEntry> SegmentEntry::NewSegmentEntry(const TableEntry *table_entry, SegmentID segment_id, BufferManager *buffer_mgr) {
     SharedPtr<SegmentEntry> new_entry = MakeShared<SegmentEntry>(table_entry);
     new_entry->row_count_ = 0;
     new_entry->row_capacity_ = DEFAULT_SEGMENT_CAPACITY;
@@ -71,13 +72,13 @@ SharedPtr<SegmentEntry> SegmentEntry::MakeNewSegmentEntry(const TableEntry *tabl
     new_entry->segment_dir_ = SegmentEntry::DetermineSegmentDir(*table_entry->TableEntryDir(), segment_id);
     if (new_entry->block_entries_.empty()) {
         new_entry->block_entries_.emplace_back(
-            MakeUnique<BlockEntry>(new_entry.get(), new_entry->block_entries_.size(), 0, new_entry->column_count_, buffer_mgr));
+            BlockEntry::NewBlockEntry(new_entry.get(), new_entry->block_entries_.size(), 0, new_entry->column_count_, buffer_mgr));
     }
     return new_entry;
 }
 
 SharedPtr<SegmentEntry>
-SegmentEntry::MakeReplaySegmentEntry(const TableEntry *table_entry, u32 segment_id, SharedPtr<String> segment_dir, TxnTimeStamp commit_ts) {
+SegmentEntry::NewReplaySegmentEntry(const TableEntry *table_entry, u32 segment_id, SharedPtr<String> segment_dir, TxnTimeStamp commit_ts) {
 
     auto new_entry = MakeShared<SegmentEntry>(table_entry);
     new_entry->row_capacity_ = DEFAULT_SEGMENT_CAPACITY;
@@ -112,7 +113,7 @@ u64 SegmentEntry::AppendData(u64 txn_id, AppendState *append_state_ptr, BufferMa
             // Append to_append_rows into block
             BlockEntry *last_block_entry = this->block_entries_.back().get();
             if (last_block_entry->GetAvailableCapacity() <= 0) {
-                this->block_entries_.emplace_back(MakeUnique<BlockEntry>(this, this->block_entries_.size(), 0, this->column_count_, buffer_mgr));
+                this->block_entries_.emplace_back(BlockEntry::NewBlockEntry(this, this->block_entries_.size(), 0, this->column_count_, buffer_mgr));
                 last_block_entry = this->block_entries_.back().get();
             }
 

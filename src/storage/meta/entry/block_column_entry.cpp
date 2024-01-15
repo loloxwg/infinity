@@ -37,8 +37,11 @@ import data_file_worker;
 
 namespace infinity {
 
+BlockColumnEntry::BlockColumnEntry(const BlockEntry *block_entry, ColumnID column_id, const SharedPtr<String> &base_dir_ref)
+    : BaseEntry(EntryType::kBlockColumn), block_entry_(block_entry), column_id_(column_id), base_dir_(base_dir_ref) {}
+
 UniquePtr<BlockColumnEntry>
-BlockColumnEntry::MakeNewBlockColumnEntry(const BlockEntry *block_entry, u64 column_id, BufferManager *buffer_manager, bool is_replay) {
+BlockColumnEntry::NewBlockColumnEntry(const BlockEntry *block_entry, ColumnID column_id, BufferManager *buffer_manager, bool is_replay) {
     UniquePtr<BlockColumnEntry> block_column_entry = MakeUnique<BlockColumnEntry>(block_entry, column_id, block_entry->base_dir());
 
     block_column_entry->file_name_ = MakeShared<String>(std::to_string(column_id) + ".col");
@@ -106,6 +109,7 @@ void BlockColumnEntry::AppendRaw(SizeT dst_offset, const_ptr_t src_p, SizeT data
     // ptr_t dst_ptr = column_data_entry->buffer_handle_->LoadData() + dst_offset;
     DataType *column_type = this->column_type_.get();
     switch (column_type->type()) {
+        // todo delete?
         case kBoolean: {
             auto src_boolean = reinterpret_cast<const BooleanT *>(src_p);
             SizeT data_count = data_size / sizeof(BooleanT);
@@ -271,8 +275,8 @@ nlohmann::json BlockColumnEntry::Serialize() {
 
 UniquePtr<BlockColumnEntry>
 BlockColumnEntry::Deserialize(const nlohmann::json &column_data_json, BlockEntry *block_entry, BufferManager *buffer_mgr) {
-    u64 column_id = column_data_json["column_id"];
-    UniquePtr<BlockColumnEntry> block_column_entry = MakeNewBlockColumnEntry(block_entry, column_id, buffer_mgr, true);
+    ColumnID column_id = column_data_json["column_id"];
+    UniquePtr<BlockColumnEntry> block_column_entry = NewBlockColumnEntry(block_entry, column_id, buffer_mgr, true);
     if (block_column_entry->outline_info_.get() != nullptr) {
         auto outline_info = block_column_entry->outline_info_.get();
         outline_info->next_file_idx = column_data_json["next_outline_idx"];

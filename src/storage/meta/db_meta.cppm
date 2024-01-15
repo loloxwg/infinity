@@ -33,12 +33,7 @@ export struct DBMeta {
 public:
     explicit DBMeta(const SharedPtr<String> &data_dir, SharedPtr<String> db_name) : db_name_(std::move(db_name)), data_dir_(data_dir) {}
 
-    static UniquePtr<DBMeta> NewDBMeta(const SharedPtr<String> &data_dir,
-                                       const SharedPtr<String> &db_name,
-                                       TxnManager *txn_mgr,
-                                       TransactionID txn_id,
-                                       TxnTimeStamp begin_ts,
-                                       bool is_delete = false);
+    static UniquePtr<DBMeta> NewDBMeta(const SharedPtr<String> &data_dir, const SharedPtr<String> &db_name);
 
     SharedPtr<String> ToString();
 

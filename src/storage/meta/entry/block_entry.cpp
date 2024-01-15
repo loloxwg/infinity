@@ -106,39 +106,50 @@ void BlockVersion::SaveToFile(const String &version_path) {
     ofs.close();
 }
 
-BlockEntry::BlockEntry(const SegmentEntry *segment_entry, u16 block_id, TxnTimeStamp checkpoint_ts, u64 column_count, BufferManager *buffer_mgr)
+/// class BlockEntry
+BlockEntry::BlockEntry(const SegmentEntry *segment_entry, BlockID block_id, TxnTimeStamp checkpoint_ts)
     : BaseEntry(EntryType::kBlock), segment_entry_(segment_entry), block_id_(block_id), row_count_(0), row_capacity_(DEFAULT_VECTOR_SIZE),
-      checkpoint_ts_(checkpoint_ts) {
-    block_dir_ = BlockEntry::DetermineDir(*segment_entry->segment_dir(), block_id);
-    columns_.reserve(column_count);
-    for (SizeT column_id = 0; column_id < column_count; ++column_id) {
-        columns_.emplace_back(BlockColumnEntry::MakeNewBlockColumnEntry(this, column_id, buffer_mgr));
-    }
+      checkpoint_ts_(checkpoint_ts) {}
 
-    block_version_ = MakeUnique<BlockVersion>(row_capacity_);
+UniquePtr<BlockEntry> BlockEntry::NewBlockEntry(const SegmentEntry *segment_entry,
+                                                BlockID block_id,
+                                                TxnTimeStamp checkpoint_ts,
+                                                u64 column_count,
+                                                BufferManager *buffer_mgr) {
+
+    auto block_entry = MakeUnique<BlockEntry>(segment_entry, block_id, checkpoint_ts);
+
+    block_entry->block_dir_ = BlockEntry::DetermineDir(*segment_entry->segment_dir(), block_id);
+    block_entry->columns_.reserve(column_count);
+    for (SizeT column_id = 0; column_id < column_count; ++column_id) {
+        block_entry->columns_.emplace_back(BlockColumnEntry::NewBlockColumnEntry(block_entry.get(), column_id, buffer_mgr, false));
+    }
+    block_entry->block_version_ = MakeUnique<BlockVersion>(block_entry->row_capacity_);
+    return block_entry;
 }
 
-BlockEntry::BlockEntry(const SegmentEntry *segment_entry,
-                       u16 block_id,
-                       TxnTimeStamp checkpoint_ts,
-                       u64 column_count,
-                       BufferManager *buffer_mgr,
-                       u16 row_count_,
-                       i16 min_row_ts_,
-                       i16 max_row_ts_)
-    : BaseEntry(EntryType::kBlock), segment_entry_(segment_entry), block_id_(block_id), row_count_(row_count_), row_capacity_(DEFAULT_VECTOR_SIZE),
-      min_row_ts_(min_row_ts_), max_row_ts_(max_row_ts_), checkpoint_ts_(checkpoint_ts) {
+UniquePtr<BlockEntry> BlockEntry::NewReplayBlockEntry(const SegmentEntry *segment_entry,
+                                                      BlockID block_id,
+                                                      TxnTimeStamp checkpoint_ts,
+                                                      u64 column_count,
+                                                      BufferManager *buffer_mgr,
+                                                      u16 row_count,
+                                                      TxnTimeStamp min_row_ts,
+                                                      TxnTimeStamp max_row_ts) {
 
-    block_dir_ = BlockEntry::DetermineDir(*segment_entry->segment_dir(), block_id);
+    auto block_entry = MakeUnique<BlockEntry>(segment_entry, block_id, checkpoint_ts);
 
-    columns_.reserve(column_count);
+    block_entry->row_count_ = row_count;
+    block_entry->min_row_ts_ = min_row_ts;
+    block_entry->max_row_ts_ = max_row_ts;
+    block_entry->block_dir_ = BlockEntry::DetermineDir(*segment_entry->segment_dir(), block_id);
+    block_entry->columns_.reserve(column_count);
     for (SizeT column_id = 0; column_id < column_count; ++column_id) {
-        // For replay purposes not create a new column buffer handler
-        columns_.emplace_back(BlockColumnEntry::MakeNewBlockColumnEntry(this, column_id, buffer_mgr, true));
+        block_entry->columns_.emplace_back(BlockColumnEntry::NewBlockColumnEntry(block_entry.get(), column_id, buffer_mgr, true));
     }
-
-    block_version_ = MakeUnique<BlockVersion>(row_capacity_);
-    block_version_->created_.emplace_back((TxnTimeStamp)min_row_ts_, (i32)row_count_);
+    block_entry->block_version_ = MakeUnique<BlockVersion>(block_entry->row_capacity_);
+    block_entry->block_version_->created_.emplace_back((TxnTimeStamp)block_entry->min_row_ts_, (i32)block_entry->row_count_);
+    return block_entry;
 }
 
 Pair<u16, u16> BlockEntry::GetVisibleRange(TxnTimeStamp begin_ts, u16 block_offset_begin) const {
@@ -179,10 +190,10 @@ u16 BlockEntry::AppendData(u64 txn_id, DataBlock *input_data_block, u16 input_bl
                                  actual_copied);
 
         LOG_TRACE(fmt::format("Segment: {}, Block: {}, Column: {} is appended with {} rows",
-                         this->segment_entry_->segment_id(),
-                         this->block_id_,
-                         column_id,
-                         actual_copied));
+                              this->segment_entry_->segment_id(),
+                              this->block_id_,
+                              column_id,
+                              actual_copied));
     }
 
     this->row_count_ += actual_copied;
@@ -330,7 +341,7 @@ nlohmann::json BlockEntry::Serialize(TxnTimeStamp) {
 UniquePtr<BlockEntry> BlockEntry::Deserialize(const nlohmann::json &block_entry_json, SegmentEntry *segment_entry, BufferManager *buffer_mgr) {
     u64 block_id = block_entry_json["block_id"];
     TxnTimeStamp checkpoint_ts = block_entry_json["checkpoint_ts"];
-    UniquePtr<BlockEntry> block_entry = MakeUnique<BlockEntry>(segment_entry, block_id, checkpoint_ts, 0, buffer_mgr);
+    UniquePtr<BlockEntry> block_entry = BlockEntry::NewBlockEntry(segment_entry, block_id, checkpoint_ts, 0, buffer_mgr);
 
     *block_entry->block_dir_ = block_entry_json["block_dir"];
     block_entry->row_capacity_ = block_entry_json["row_capacity"];
@@ -358,7 +369,7 @@ i32 BlockEntry::GetAvailableCapacity() {
     return this->row_capacity_ - this->row_count_;
 }
 
-SharedPtr<String> BlockEntry::DetermineDir(const String &parent_dir, u64 block_id) {
+SharedPtr<String> BlockEntry::DetermineDir(const String &parent_dir, BlockID block_id) {
     LocalFileSystem fs;
     SharedPtr<String> base_dir;
     base_dir = MakeShared<String>(fmt::format("{}/blk_{}", parent_dir, block_id));
