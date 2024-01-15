@@ -31,9 +31,9 @@ import third_party;
 
 namespace infinity {
 
-SharedPtr<PhysicalWalOperation> PhysicalWalOperation::ReadAdv(char *&ptr, i32 max_bytes) {
+UniquePtr<PhysicalWalOperation> PhysicalWalOperation::ReadAdv(char *&ptr, i32 max_bytes) {
     char *const ptr_end = ptr + max_bytes;
-    SharedPtr<PhysicalWalOperation> operation = nullptr;
+    UniquePtr<PhysicalWalOperation> operation = nullptr;
     auto operation_type = ReadBufAdv<PhysicalWalOperationType>(ptr);
     switch (operation_type) {
         case PhysicalWalOperationType::ADD_DATABASE_META: {
@@ -41,7 +41,7 @@ SharedPtr<PhysicalWalOperation> PhysicalWalOperation::ReadAdv(char *&ptr, i32 ma
             String data_dir = ReadBufAdv<String>(ptr);
             TxnTimeStamp begin_ts = ReadBufAdv<TxnTimeStamp>(ptr);
             bool is_delete = ReadBufAdv<bool>(ptr);
-            operation = MakeShared<AddDatabaseMetaOperation>(begin_ts, is_delete, db_name, data_dir);
+            operation = MakeUnique<AddDatabaseMetaOperation>(begin_ts, is_delete, db_name, data_dir);
             break;
         }
         case PhysicalWalOperationType::ADD_DATABASE_ENTRY: {
@@ -49,7 +49,7 @@ SharedPtr<PhysicalWalOperation> PhysicalWalOperation::ReadAdv(char *&ptr, i32 ma
             String db_entry_dir = ReadBufAdv<String>(ptr);
             TxnTimeStamp begin_ts = ReadBufAdv<TxnTimeStamp>(ptr);
             bool is_delete = ReadBufAdv<bool>(ptr);
-            operation = MakeShared<AddDatabaseEntryOperation>(begin_ts, is_delete, db_name, db_entry_dir);
+            operation = MakeUnique<AddDatabaseEntryOperation>(begin_ts, is_delete, db_name, db_entry_dir);
             operation->begin_ts_ = begin_ts;
             operation->is_delete_ = is_delete;
             break;
@@ -60,7 +60,7 @@ SharedPtr<PhysicalWalOperation> PhysicalWalOperation::ReadAdv(char *&ptr, i32 ma
             String table_entry_dir = ReadBufAdv<String>(ptr);
             TxnTimeStamp begin_ts = ReadBufAdv<TxnTimeStamp>(ptr);
             bool is_delete = ReadBufAdv<bool>(ptr);
-            operation = MakeShared<AddTableEntryOperation>(begin_ts, is_delete, db_name, table_name, table_entry_dir);
+            operation = MakeUnique<AddTableEntryOperation>(begin_ts, is_delete, db_name, table_name, table_entry_dir);
             operation->begin_ts_ = begin_ts;
             operation->is_delete_ = is_delete;
             break;
@@ -73,7 +73,7 @@ SharedPtr<PhysicalWalOperation> PhysicalWalOperation::ReadAdv(char *&ptr, i32 ma
 
             TxnTimeStamp begin_ts = ReadBufAdv<TxnTimeStamp>(ptr);
             bool is_delete = ReadBufAdv<bool>(ptr);
-            operation = MakeShared<AddSegmentEntryOperation>(begin_ts, is_delete, db_name, table_name, segment_id, segment_dir);
+            operation = MakeUnique<AddSegmentEntryOperation>(begin_ts, is_delete, db_name, table_name, segment_id, segment_dir);
             operation->begin_ts_ = begin_ts;
             operation->is_delete_ = is_delete;
             break;
@@ -89,7 +89,7 @@ SharedPtr<PhysicalWalOperation> PhysicalWalOperation::ReadAdv(char *&ptr, i32 ma
 
             TxnTimeStamp begin_ts = ReadBufAdv<TxnTimeStamp>(ptr);
             bool is_delete = ReadBufAdv<bool>(ptr);
-            operation = MakeShared<AddBlockEntryOperation>(begin_ts,
+            operation = MakeUnique<AddBlockEntryOperation>(begin_ts,
                                                            is_delete,
                                                            db_name,
                                                            table_name,
@@ -112,7 +112,7 @@ SharedPtr<PhysicalWalOperation> PhysicalWalOperation::ReadAdv(char *&ptr, i32 ma
             bool is_delete = ReadBufAdv<bool>(ptr);
 
             operation =
-                MakeShared<AddColumnEntryOperation>(begin_ts, is_delete, db_name, table_name, segment_id, block_id, column_id, next_outline_idx);
+                MakeUnique<AddColumnEntryOperation>(begin_ts, is_delete, db_name, table_name, segment_id, block_id, column_id, next_outline_idx);
             break;
         }
         default:
@@ -205,8 +205,8 @@ bool PhysicalWalEntry::operator==(const PhysicalWalEntry &other) const {
         return false;
     }
     for (u32 i = 0; i < this->operations_.size(); i++) {
-        const SharedPtr<PhysicalWalOperation> &operation1 = this->operations_[i];
-        const SharedPtr<PhysicalWalOperation> &operation2 = other.operations_[i];
+        const UniquePtr<PhysicalWalOperation> &operation1 = this->operations_[i];
+        const UniquePtr<PhysicalWalOperation> &operation2 = other.operations_[i];
         if (operation1.get() == nullptr || operation2.get() == nullptr || (*operation1).operator!=(*operation2)) {
             return false;
         }
@@ -252,8 +252,8 @@ SharedPtr<PhysicalWalEntry> PhysicalWalEntry::ReadAdv(char *&ptr, i32 max_bytes)
         if (max_bytes <= 0) {
             Error<StorageException>("ptr goes out of range when reading WalEntry");
         }
-        SharedPtr<PhysicalWalOperation> cmd = PhysicalWalOperation::ReadAdv(ptr, max_bytes);
-        entry->operations_.push_back(cmd);
+        UniquePtr<PhysicalWalOperation> operation = PhysicalWalOperation::ReadAdv(ptr, max_bytes);
+        entry->operations_.emplace_back(std::move(operation));
     }
     ptr += sizeof(i32);
     max_bytes = ptr_end - ptr;

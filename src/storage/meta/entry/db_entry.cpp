@@ -79,8 +79,8 @@ Tuple<TableEntry *, Status> DBEntry::CreateTable(TableEntryType table_entry_type
         table_meta = new_table_meta.get();
 
         if (txn_mgr != nullptr) {
-            auto operation = MakeShared<AddTableMetaOperation>(table_meta);
-            txn_mgr->GetTxn(txn_id)->AddPhysicalWalOperation(operation);
+            auto operation = MakeUnique<AddTableMetaOperation>(table_meta);
+            txn_mgr->GetTxn(txn_id)->AddPhysicalWalOperation(std::move(operation));
         }
 
         this->rw_locker_.lock();

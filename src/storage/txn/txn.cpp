@@ -147,8 +147,8 @@ Status Txn::CreateDatabase(const String &db_name, ConflictType conflict_type) {
     db_names_.insert(db_name);
     wal_entry_->cmds_.push_back(MakeShared<WalCmdCreateDatabase>(db_name));
 
-    auto operation = MakeShared<AddDatabaseEntryOperation>(db_entry);
-    this->AddPhysicalWalOperation(operation);
+    auto operation = MakeUnique<AddDatabaseEntryOperation>(db_entry);
+    this->AddPhysicalWalOperation(std::move(operation));
     return Status::OK();
 }
 
@@ -179,8 +179,8 @@ Status Txn::DropDatabase(const String &db_name, ConflictType) {
         db_names_.insert(db_name);
     }
     wal_entry_->cmds_.push_back(MakeShared<WalCmdDropDatabase>(db_name));
-    auto operation = MakeShared<AddDatabaseEntryOperation>(dropped_db_entry);
-    this->AddPhysicalWalOperation(operation);
+    auto operation = MakeUnique<AddDatabaseEntryOperation>(dropped_db_entry);
+    this->AddPhysicalWalOperation(std::move(operation));
     return Status::OK();
 }
 
@@ -246,8 +246,8 @@ Status Txn::CreateTable(const String &db_name, const SharedPtr<TableDef> &table_
     txn_tables_.insert(table_entry);
     wal_entry_->cmds_.push_back(MakeShared<WalCmdCreateTable>(db_name, table_def));
 
-    auto operation = MakeShared<AddTableEntryOperation>(table_entry);
-    this->AddPhysicalWalOperation(operation);
+    auto operation = MakeUnique<AddTableEntryOperation>(table_entry);
+    this->AddPhysicalWalOperation(std::move(operation));
     return Status::OK();
 }
 
@@ -274,8 +274,8 @@ Status Txn::DropTableCollectionByName(const String &db_name, const String &table
 
     wal_entry_->cmds_.push_back(MakeShared<WalCmdDropTable>(db_name, table_name));
 
-    auto operation = MakeShared<AddTableEntryOperation>(table_entry);
-    this->AddPhysicalWalOperation(operation);
+    auto operation = MakeUnique<AddTableEntryOperation>(table_entry);
+    this->AddPhysicalWalOperation(std::move(operation));
     return Status::OK();
 }
 
@@ -526,7 +526,9 @@ void Txn::Rollback() {
 
 void Txn::AddWalCmd(const SharedPtr<WalCmd> &cmd) { wal_entry_->cmds_.push_back(cmd); }
 
-void Txn::AddPhysicalWalOperation(const SharedPtr<PhysicalWalOperation> &operation) { local_physical_wal_entry_->operations().push_back(operation); }
+void Txn::AddPhysicalWalOperation(UniquePtr<PhysicalWalOperation> operation) {
+    local_physical_wal_entry_->operations().emplace_back(std::move(operation));
+}
 
 void Txn::Checkpoint(const TxnTimeStamp max_commit_ts, bool is_full_checkpoint) {
     String dir_name = *txn_mgr_->GetBufferMgr()->BaseDir().get() + "/catalog";

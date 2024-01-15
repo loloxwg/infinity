@@ -66,7 +66,7 @@ public:
     auto operator!=(const PhysicalWalOperation &other) const -> bool { return !(*this == other); }
     [[nodiscard]] virtual SizeT GetSizeInBytes() const = 0; // This is a pure virtual function
     virtual void WriteAdv(char *&ptr) const = 0;
-    static SharedPtr<PhysicalWalOperation> ReadAdv(char *&ptr, i32 max_bytes);
+    static UniquePtr<PhysicalWalOperation> ReadAdv(char *&ptr, i32 max_bytes);
     SizeT GetBaseSizeInBytes() const { return sizeof(TxnTimeStamp) + sizeof(bool); }
 
 public:
@@ -348,10 +348,10 @@ public:
     static SharedPtr<PhysicalWalEntry> ReadAdv(char *&ptr, i32 max_bytes);
     [[nodiscard]] String ToString() const;
 
-    Vector<SharedPtr<PhysicalWalOperation>> &operations() { return operations_; }
+    Vector<UniquePtr<PhysicalWalOperation>> &operations() { return operations_; }
 
 private:
-    Vector<SharedPtr<PhysicalWalOperation>> operations_{};
+    Vector<UniquePtr<PhysicalWalOperation>> operations_{};
 };
 
 } // namespace infinity

@@ -89,10 +89,7 @@ Tuple<TableEntry *, Status> TableMeta::CreateNewEntry(TableEntryType table_entry
         // Already have a table entry, check if the table entry is valid here.
         BaseEntry *header_base_entry = this->entry_list_.front().get();
         if (header_base_entry->entry_type_ == EntryType::kDummy) {
-            // Dummy entry in the header
-            //            UniquePtr<TableEntry> table_entry =
-            //                MakeUnique<TableEntry>(this->db_entry_dir_, table_collection_name_ptr, columns, table_entry_type, this, txn_id,
-            //                begin_ts);
+            // Dummy entry in the header of the list, insert the new table entry to the front.
             UniquePtr<TableEntry> table_entry =
                 MakeUnique<TableEntry>(this->db_entry_dir_, table_collection_name_ptr, columns, table_entry_type, this, txn_id, begin_ts);
             table_entry_ptr = table_entry.get();
@@ -187,7 +184,7 @@ Tuple<TableEntry *, Status> TableMeta::CreateNewEntry(TableEntryType table_entry
 }
 
 Tuple<TableEntry *, Status>
-TableMeta::DropNewEntry(u64 txn_id, TxnTimeStamp begin_ts, TxnManager *txn_mgr, const String &table_name, ConflictType conflict_type) {
+TableMeta::DropNewEntry(TransactionID txn_id, TxnTimeStamp begin_ts, TxnManager *txn_mgr, const String &table_name, ConflictType conflict_type) {
 
     TableEntry *table_entry_ptr{nullptr};
 

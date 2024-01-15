@@ -88,8 +88,8 @@ NewCatalog::CreateDatabase(const String &db_name, TransactionID txn_id, TxnTimeS
         UniquePtr<DBMeta> new_db_meta = DBMeta::NewDBMeta(db_dir, MakeShared<String>(db_name));
 
         if (txn_mgr != nullptr) {
-            auto operation = MakeShared<AddDatabaseMetaOperation>(new_db_meta.get());
-            txn_mgr->GetTxn(txn_id)->AddPhysicalWalOperation(operation);
+            auto operation = MakeUnique<AddDatabaseMetaOperation>(new_db_meta.get());
+            txn_mgr->GetTxn(txn_id)->AddPhysicalWalOperation(std::move(operation));
         }
 
         db_meta = new_db_meta.get();
@@ -120,8 +120,8 @@ Tuple<DBEntry *, Status> NewCatalog::DropDatabase(const String &db_name, u64 txn
     if (this->databases_.find(db_name) != this->databases_.end()) {
         db_meta = this->databases_[db_name].get();
         if (txn_mgr != nullptr) {
-            auto operation = MakeShared<AddDatabaseMetaOperation>(db_meta);
-            txn_mgr->GetTxn(txn_id)->AddPhysicalWalOperation(operation);
+            auto operation = MakeUnique<AddDatabaseMetaOperation>(db_meta);
+            txn_mgr->GetTxn(txn_id)->AddPhysicalWalOperation(std::move(operation));
         }
     }
     this->rw_locker_.unlock_shared();
