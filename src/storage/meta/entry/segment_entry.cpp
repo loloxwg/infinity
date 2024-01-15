@@ -58,38 +58,46 @@ namespace infinity {
 
 SegmentEntry::SegmentEntry(const TableEntry *table_entry) : BaseEntry(EntryType::kSegment), table_entry_(table_entry) {}
 
-SharedPtr<SegmentEntry> SegmentEntry::NewSegmentEntry(const TableEntry *table_entry, SegmentID segment_id, BufferManager *buffer_mgr) {
-    SharedPtr<SegmentEntry> new_entry = MakeShared<SegmentEntry>(table_entry);
-    new_entry->row_count_ = 0;
-    new_entry->row_capacity_ = DEFAULT_SEGMENT_CAPACITY;
-    new_entry->segment_id_ = segment_id;
-    new_entry->min_row_ts_ = 0;
-    new_entry->max_row_ts_ = 0;
+SharedPtr<SegmentEntry> SegmentEntry::NewSegmentEntry(const TableEntry *table_entry, SegmentID segment_id, BufferManager *buffer_mgr, Txn *txn) {
+    SharedPtr<SegmentEntry> segment_entry = MakeShared<SegmentEntry>(table_entry);
+    if (txn != nullptr) {
+        auto operation = MakeUnique<AddSegmentEntryOperation>(segment_entry.get());
+        txn->AddPhysicalWalOperation(std::move(operation));
+    }
+    segment_entry->row_count_ = 0;
+    segment_entry->row_capacity_ = DEFAULT_SEGMENT_CAPACITY;
+    segment_entry->segment_id_ = segment_id;
+    segment_entry->min_row_ts_ = 0;
+    segment_entry->max_row_ts_ = 0;
 
     const auto *table_ptr = (const TableEntry *)table_entry;
-    new_entry->column_count_ = table_ptr->ColumnCount();
+    segment_entry->column_count_ = table_ptr->ColumnCount();
 
-    new_entry->segment_dir_ = SegmentEntry::DetermineSegmentDir(*table_entry->TableEntryDir(), segment_id);
-    if (new_entry->block_entries_.empty()) {
-        new_entry->block_entries_.emplace_back(
-            BlockEntry::NewBlockEntry(new_entry.get(), new_entry->block_entries_.size(), 0, new_entry->column_count_, buffer_mgr));
+    segment_entry->segment_dir_ = SegmentEntry::DetermineSegmentDir(*table_entry->TableEntryDir(), segment_id);
+    if (segment_entry->block_entries_.empty()) {
+        auto block_entry =
+            BlockEntry::NewBlockEntry(segment_entry.get(), segment_entry->block_entries_.size(), 0, segment_entry->column_count_, buffer_mgr, txn);
+        segment_entry->block_entries_.emplace_back(std::move(block_entry));
     }
-    return new_entry;
+
+    return segment_entry;
 }
 
-SharedPtr<SegmentEntry>
-SegmentEntry::NewReplaySegmentEntry(const TableEntry *table_entry, u32 segment_id, SharedPtr<String> segment_dir, TxnTimeStamp commit_ts) {
+SharedPtr<SegmentEntry> SegmentEntry::NewReplaySegmentEntry(const TableEntry *table_entry,
+                                                            SegmentID segment_id,
+                                                            const SharedPtr<String> &segment_dir,
+                                                            TxnTimeStamp commit_ts) {
 
-    auto new_entry = MakeShared<SegmentEntry>(table_entry);
-    new_entry->row_capacity_ = DEFAULT_SEGMENT_CAPACITY;
-    new_entry->segment_id_ = segment_id;
-    new_entry->min_row_ts_ = commit_ts;
-    new_entry->max_row_ts_ = commit_ts;
+    auto segment_entry = MakeShared<SegmentEntry>(table_entry);
+    segment_entry->row_capacity_ = DEFAULT_SEGMENT_CAPACITY;
+    segment_entry->segment_id_ = segment_id;
+    segment_entry->min_row_ts_ = commit_ts;
+    segment_entry->max_row_ts_ = commit_ts;
 
     const auto *table_ptr = (const TableEntry *)table_entry;
-    new_entry->column_count_ = table_ptr->ColumnCount();
-    new_entry->segment_dir_ = std::move(segment_dir);
-    return new_entry;
+    segment_entry->column_count_ = table_ptr->ColumnCount();
+    segment_entry->segment_dir_ = segment_dir;
+    return segment_entry;
 }
 
 int SegmentEntry::Room() {
@@ -97,7 +105,7 @@ int SegmentEntry::Room() {
     return this->row_capacity_ - this->row_count_;
 }
 
-u64 SegmentEntry::AppendData(u64 txn_id, AppendState *append_state_ptr, BufferManager *buffer_mgr) {
+u64 SegmentEntry::AppendData(u64 txn_id, AppendState *append_state_ptr, BufferManager *buffer_mgr, Txn *txn) {
     std::unique_lock<std::shared_mutex> lck(this->rw_locker_);
     if (this->row_capacity_ - this->row_count_ <= 0)
         return 0;
@@ -113,12 +121,13 @@ u64 SegmentEntry::AppendData(u64 txn_id, AppendState *append_state_ptr, BufferMa
             // Append to_append_rows into block
             BlockEntry *last_block_entry = this->block_entries_.back().get();
             if (last_block_entry->GetAvailableCapacity() <= 0) {
-                this->block_entries_.emplace_back(BlockEntry::NewBlockEntry(this, this->block_entries_.size(), 0, this->column_count_, buffer_mgr));
+                this->block_entries_.emplace_back(
+                    BlockEntry::NewBlockEntry(this, this->block_entries_.size(), 0, this->column_count_, buffer_mgr, txn));
                 last_block_entry = this->block_entries_.back().get();
             }
 
-            u32 range_segment_id = this->segment_id_;
-            u16 range_block_id = last_block_entry->block_id();
+            SegmentID range_segment_id = this->segment_id_;
+            BlockID range_block_id = last_block_entry->block_id();
             u16 range_block_start_row = last_block_entry->row_count();
 
             u16 actual_appended =

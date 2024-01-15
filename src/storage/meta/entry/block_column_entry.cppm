@@ -28,6 +28,7 @@ import buffer_manager;
 import column_vector;
 import local_file_system;
 import vector_buffer;
+import txn;
 
 namespace infinity {
 
@@ -42,7 +43,7 @@ public:
     explicit BlockColumnEntry(const BlockEntry *block_entry, ColumnID column_id, const SharedPtr<String> &base_dir_ref);
 
     static UniquePtr<BlockColumnEntry>
-    NewBlockColumnEntry(const BlockEntry *block_entry, ColumnID column_id, BufferManager *buffer_manager, bool is_replay = false);
+    NewBlockColumnEntry(const BlockEntry *block_entry, ColumnID column_id, BufferManager *buffer_manager, Txn *txn, bool is_replay = false);
 
     nlohmann::json Serialize();
 

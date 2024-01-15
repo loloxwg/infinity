@@ -25,6 +25,7 @@ import third_party;
 import defer_op;
 import local_file_system;
 import serialize;
+import wal;
 
 import infinity_exception;
 import parser;
@@ -115,14 +116,21 @@ UniquePtr<BlockEntry> BlockEntry::NewBlockEntry(const SegmentEntry *segment_entr
                                                 BlockID block_id,
                                                 TxnTimeStamp checkpoint_ts,
                                                 u64 column_count,
-                                                BufferManager *buffer_mgr) {
+                                                BufferManager *buffer_mgr,
+                                                Txn *txn) {
 
     auto block_entry = MakeUnique<BlockEntry>(segment_entry, block_id, checkpoint_ts);
+
+    if (txn != nullptr) {
+        auto operation = MakeUnique<AddBlockEntryOperation>(block_entry.get());
+        txn->AddPhysicalWalOperation(std::move(operation));
+    }
 
     block_entry->block_dir_ = BlockEntry::DetermineDir(*segment_entry->segment_dir(), block_id);
     block_entry->columns_.reserve(column_count);
     for (SizeT column_id = 0; column_id < column_count; ++column_id) {
-        block_entry->columns_.emplace_back(BlockColumnEntry::NewBlockColumnEntry(block_entry.get(), column_id, buffer_mgr, false));
+        auto column_entry = BlockColumnEntry::NewBlockColumnEntry(block_entry.get(), column_id, buffer_mgr, txn, false);
+        block_entry->columns_.emplace_back(std::move(column_entry));
     }
     block_entry->block_version_ = MakeUnique<BlockVersion>(block_entry->row_capacity_);
     return block_entry;
@@ -145,7 +153,7 @@ UniquePtr<BlockEntry> BlockEntry::NewReplayBlockEntry(const SegmentEntry *segmen
     block_entry->block_dir_ = BlockEntry::DetermineDir(*segment_entry->segment_dir(), block_id);
     block_entry->columns_.reserve(column_count);
     for (SizeT column_id = 0; column_id < column_count; ++column_id) {
-        block_entry->columns_.emplace_back(BlockColumnEntry::NewBlockColumnEntry(block_entry.get(), column_id, buffer_mgr, true));
+        block_entry->columns_.emplace_back(BlockColumnEntry::NewBlockColumnEntry(block_entry.get(), column_id, buffer_mgr, nullptr, true));
     }
     block_entry->block_version_ = MakeUnique<BlockVersion>(block_entry->row_capacity_);
     block_entry->block_version_->created_.emplace_back((TxnTimeStamp)block_entry->min_row_ts_, (i32)block_entry->row_count_);
@@ -341,7 +349,7 @@ nlohmann::json BlockEntry::Serialize(TxnTimeStamp) {
 UniquePtr<BlockEntry> BlockEntry::Deserialize(const nlohmann::json &block_entry_json, SegmentEntry *segment_entry, BufferManager *buffer_mgr) {
     u64 block_id = block_entry_json["block_id"];
     TxnTimeStamp checkpoint_ts = block_entry_json["checkpoint_ts"];
-    UniquePtr<BlockEntry> block_entry = BlockEntry::NewBlockEntry(segment_entry, block_id, checkpoint_ts, 0, buffer_mgr);
+    UniquePtr<BlockEntry> block_entry = BlockEntry::NewBlockEntry(segment_entry, block_id, checkpoint_ts, 0, buffer_mgr, nullptr);
 
     *block_entry->block_dir_ = block_entry_json["block_dir"];
     block_entry->row_capacity_ = block_entry_json["row_capacity"];

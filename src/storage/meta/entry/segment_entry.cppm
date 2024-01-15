@@ -42,10 +42,10 @@ struct SegmentEntry : public BaseEntry {
 public:
     explicit SegmentEntry(const TableEntry *table_entry);
 
-    static SharedPtr<SegmentEntry> NewSegmentEntry(const TableEntry *table_entry, SegmentID segment_id, BufferManager *buffer_mgr);
+    static SharedPtr<SegmentEntry> NewSegmentEntry(const TableEntry *table_entry, SegmentID segment_id, BufferManager *buffer_mgr, Txn *txn);
 
     static SharedPtr<SegmentEntry>
-    NewReplaySegmentEntry(const TableEntry *table_entry, SegmentID segment_id, SharedPtr<String> segment_dir, TxnTimeStamp commit_ts);
+    NewReplaySegmentEntry(const TableEntry *table_entry, SegmentID segment_id, const SharedPtr<String> &segment_dir, TxnTimeStamp commit_ts);
 
     static UniquePtr<CreateIndexParam> GetCreateIndexParam(SizeT segment_row_count, const IndexBase *index_base, const ColumnDef *column_def);
 
@@ -96,7 +96,7 @@ public:
     }
 
 protected:
-    u64 AppendData(TransactionID txn_id, AppendState *append_state_ptr, BufferManager *buffer_mgr);
+    u64 AppendData(TransactionID txn_id, AppendState *append_state_ptr, BufferManager *buffer_mgr, Txn *txn);
 
     void DeleteData(TransactionID txn_id, TxnTimeStamp commit_ts, const HashMap<u16, Vector<RowID>> &block_row_hashmap);
 

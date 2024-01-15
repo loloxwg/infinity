@@ -69,19 +69,15 @@ public:
     // for iterator unit test
     explicit BlockEntry() : BaseEntry(EntryType::kBlock){};
 
-    /// Normal Constructor
+    // Normal Constructor
     explicit BlockEntry(const SegmentEntry *segment_entry, BlockID block_id, TxnTimeStamp checkpoint_ts);
-//    /// Construct a new block entry For Replay
-//    explicit BlockEntry(const SegmentEntry *segment_entry,
-//                        u16 block_id,
-//                        TxnTimeStamp checkpoint_ts,
-//                        u64 column_count,
-//                        BufferManager *buffer_mgr,
-//                        u16 row_count,
-//                        TxnTimeStamp min_row_ts,
-//                        TxnTimeStamp max_row_ts);
 
-    static UniquePtr<BlockEntry> NewBlockEntry(const SegmentEntry *segment_entry, BlockID block_id, TxnTimeStamp checkpoint_ts, u64 column_count, BufferManager *buffer_mgr);
+    static UniquePtr<BlockEntry> NewBlockEntry(const SegmentEntry *segment_entry,
+                                               BlockID block_id,
+                                               TxnTimeStamp checkpoint_ts,
+                                               u64 column_count,
+                                               BufferManager *buffer_mgr,
+                                               Txn *txn);
 
     static UniquePtr<BlockEntry> NewReplayBlockEntry(const SegmentEntry *segment_entry,
                                                      u16 block_id,

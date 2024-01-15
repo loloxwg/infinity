@@ -197,6 +197,7 @@ void TableEntry::Append(u64 txn_id, void *txn_store, BufferManager *buffer_mgr) 
     }
     TxnTableStore *txn_store_ptr = (TxnTableStore *)txn_store;
     AppendState *append_state_ptr = txn_store_ptr->append_state_.get();
+    Txn *txn = txn_store_ptr->txn_;
     if (append_state_ptr->Finished()) {
         LOG_TRACE("No append is done.");
         return;
@@ -208,12 +209,7 @@ void TableEntry::Append(u64 txn_id, void *txn_store, BufferManager *buffer_mgr) 
             if (this->unsealed_segment_ == nullptr || unsealed_segment_->Room() <= 0) {
                 // unsealed_segment_ is unpopulated or full
                 u32 new_segment_id = this->next_segment_id_++;
-                SharedPtr<SegmentEntry> new_segment = SegmentEntry::NewSegmentEntry(this, new_segment_id, buffer_mgr);
-
-                {
-                    auto operation = MakeShared<AddSegmentEntryOperation>(new_segment.get());
-                    txn_store_ptr->txn_->AddPhysicalWalOperation(operation);
-                }
+                SharedPtr<SegmentEntry> new_segment = SegmentEntry::NewSegmentEntry(this, new_segment_id, buffer_mgr, txn);
 
                 this->segment_map_.emplace(new_segment_id, new_segment);
                 this->unsealed_segment_ = new_segment.get();
@@ -221,7 +217,7 @@ void TableEntry::Append(u64 txn_id, void *txn_store, BufferManager *buffer_mgr) 
             }
         }
         // Append data from app_state_ptr to the buffer in segment. If append all data, then set finish.
-        u64 actual_appended = unsealed_segment_->AppendData(txn_id, append_state_ptr, buffer_mgr);
+        u64 actual_appended = unsealed_segment_->AppendData(txn_id, append_state_ptr, buffer_mgr, txn);
         LOG_TRACE(fmt::format("Segment {} is appended with {} rows", this->unsealed_segment_->segment_id_, actual_appended));
     }
 }

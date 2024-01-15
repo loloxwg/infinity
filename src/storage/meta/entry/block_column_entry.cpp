@@ -34,6 +34,7 @@ import infinity_exception;
 import varchar_layout;
 import logger;
 import data_file_worker;
+import wal;
 
 namespace infinity {
 
@@ -41,8 +42,13 @@ BlockColumnEntry::BlockColumnEntry(const BlockEntry *block_entry, ColumnID colum
     : BaseEntry(EntryType::kBlockColumn), block_entry_(block_entry), column_id_(column_id), base_dir_(base_dir_ref) {}
 
 UniquePtr<BlockColumnEntry>
-BlockColumnEntry::NewBlockColumnEntry(const BlockEntry *block_entry, ColumnID column_id, BufferManager *buffer_manager, bool is_replay) {
+BlockColumnEntry::NewBlockColumnEntry(const BlockEntry *block_entry, ColumnID column_id, BufferManager *buffer_manager, Txn *txn, bool is_replay) {
     UniquePtr<BlockColumnEntry> block_column_entry = MakeUnique<BlockColumnEntry>(block_entry, column_id, block_entry->base_dir());
+
+    if (txn != nullptr) {
+        auto operation = MakeUnique<AddColumnEntryOperation>(block_column_entry.get());
+        txn->AddPhysicalWalOperation(std::move(operation));
+    }
 
     block_column_entry->file_name_ = MakeShared<String>(std::to_string(column_id) + ".col");
 
@@ -103,13 +109,13 @@ void BlockColumnEntry::Append(BlockColumnEntry *column_entry,
     column_entry->AppendRaw(dst_offset, src_ptr, data_size, input_column_vector->buffer_);
 }
 
+// TODO: Need to refactor
 void BlockColumnEntry::AppendRaw(SizeT dst_offset, const_ptr_t src_p, SizeT data_size, SharedPtr<VectorBuffer> vector_buffer) {
     BufferHandle buffer_handle = this->buffer_->Load();
     ptr_t dst_p = static_cast<ptr_t>(buffer_handle.GetDataMut()) + dst_offset;
     // ptr_t dst_ptr = column_data_entry->buffer_handle_->LoadData() + dst_offset;
     DataType *column_type = this->column_type_.get();
     switch (column_type->type()) {
-        // todo delete?
         case kBoolean: {
             auto src_boolean = reinterpret_cast<const BooleanT *>(src_p);
             SizeT data_count = data_size / sizeof(BooleanT);
@@ -276,7 +282,7 @@ nlohmann::json BlockColumnEntry::Serialize() {
 UniquePtr<BlockColumnEntry>
 BlockColumnEntry::Deserialize(const nlohmann::json &column_data_json, BlockEntry *block_entry, BufferManager *buffer_mgr) {
     ColumnID column_id = column_data_json["column_id"];
-    UniquePtr<BlockColumnEntry> block_column_entry = NewBlockColumnEntry(block_entry, column_id, buffer_mgr, true);
+    UniquePtr<BlockColumnEntry> block_column_entry = NewBlockColumnEntry(block_entry, column_id, buffer_mgr, nullptr, true);
     if (block_column_entry->outline_info_.get() != nullptr) {
         auto outline_info = block_column_entry->outline_info_.get();
         outline_info->next_file_idx = column_data_json["next_outline_idx"];
