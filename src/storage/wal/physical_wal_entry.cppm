@@ -59,6 +59,7 @@ export enum class PhysicalWalOperationType : i8 {
 export class PhysicalWalOperation {
 public:
     PhysicalWalOperation() = default;
+    PhysicalWalOperation(PhysicalWalOperationType type) : type_(type) {}
     PhysicalWalOperation(TxnTimeStamp begin_ts, bool is_delete) : begin_ts_(begin_ts), is_delete_(is_delete) {}
     virtual ~PhysicalWalOperation() = default;
     virtual auto GetType() -> PhysicalWalOperationType = 0; // This is a pure virtual function
@@ -68,10 +69,15 @@ public:
     virtual void WriteAdv(char *&ptr) const = 0;
     static UniquePtr<PhysicalWalOperation> ReadAdv(char *&ptr, i32 max_bytes);
     SizeT GetBaseSizeInBytes() const { return sizeof(TxnTimeStamp) + sizeof(bool); }
+    virtual void Snapshot() = 0;
+    virtual const String ToString() const = 0;
 
 public:
     TxnTimeStamp begin_ts_{0};
     bool is_delete_{false};
+    bool is_flushed_{false};
+    bool is_snapshoted_{false};
+    PhysicalWalOperationType type_{};
 };
 
 /// class AddDatabaseMetaOperation
@@ -79,7 +85,7 @@ export class AddDatabaseMetaOperation : public PhysicalWalOperation {
 public:
     explicit AddDatabaseMetaOperation(TxnTimeStamp begin_ts, bool is_delete, String db_name, String data_dir)
         : PhysicalWalOperation(begin_ts, is_delete), db_name_(std::move(db_name)), data_dir_(std::move(data_dir)) {}
-    explicit AddDatabaseMetaOperation(DBMeta *db_meta) : db_meta_(db_meta) {}
+    explicit AddDatabaseMetaOperation(DBMeta *db_meta) : PhysicalWalOperation(PhysicalWalOperationType::ADD_DATABASE_META), db_meta_(db_meta) {}
     PhysicalWalOperationType GetType() override { return PhysicalWalOperationType::ADD_DATABASE_META; }
     auto operator==(const PhysicalWalOperation &other) const -> bool override {
         const auto *other_cmd = dynamic_cast<const AddDatabaseMetaOperation *>(&other);
@@ -91,6 +97,8 @@ public:
         return total_size;
     }
     void WriteAdv(char *&buf) const override;
+    void Snapshot() override;
+    const String ToString() const override { return String("AddDatabaseMetaOperation"); }
 
 public:
     DBMeta *db_meta_{};
@@ -105,7 +113,7 @@ export class AddTableMetaOperation : public PhysicalWalOperation {
 public:
     explicit AddTableMetaOperation(TxnTimeStamp begin_ts, bool is_delete, String table_name, String db_entry_dir_)
         : PhysicalWalOperation(begin_ts, is_delete), table_name_(std::move(table_name)), db_entry_dir_(std::move(db_entry_dir_)) {}
-    explicit AddTableMetaOperation(TableMeta *table_meta) : table_meta_(table_meta) {}
+    explicit AddTableMetaOperation(TableMeta *table_meta) : PhysicalWalOperation(PhysicalWalOperationType::ADD_TABLE_META), table_meta_(table_meta) {}
     PhysicalWalOperationType GetType() override { return PhysicalWalOperationType::ADD_DATABASE_META; }
     auto operator==(const PhysicalWalOperation &other) const -> bool override {
         const auto *other_cmd = dynamic_cast<const AddTableMetaOperation *>(&other);
@@ -117,6 +125,8 @@ public:
         return total_size;
     }
     void WriteAdv(char *&buf) const override;
+    void Snapshot() override;
+    const String ToString() const override { return "AddTableMetaOperation"; }
 
 public:
     TableMeta *table_meta_{};
@@ -131,7 +141,8 @@ export class AddDatabaseEntryOperation : public PhysicalWalOperation {
 public:
     explicit AddDatabaseEntryOperation(TxnTimeStamp begin_ts, bool is_delete, String db_name, String db_entry_dir)
         : PhysicalWalOperation(begin_ts, is_delete), db_name_(std::move(db_name)), db_entry_dir_(std::move(db_entry_dir)) {}
-    explicit AddDatabaseEntryOperation(DBEntry *db_entry) : db_entry_(db_entry) {}
+    explicit AddDatabaseEntryOperation(SharedPtr<DBEntry> db_entry)
+        : PhysicalWalOperation(PhysicalWalOperationType::ADD_DATABASE_ENTRY), db_entry_(db_entry) {}
     PhysicalWalOperationType GetType() override { return PhysicalWalOperationType::ADD_DATABASE_ENTRY; }
     auto operator==(const PhysicalWalOperation &other) const -> bool override {
         const auto *other_cmd = dynamic_cast<const AddDatabaseEntryOperation *>(&other);
@@ -143,9 +154,11 @@ public:
         return total_size;
     }
     void WriteAdv(char *&buf) const override;
+    void Snapshot() override;
+    const String ToString() const override { return "AddDatabaseEntryOperation"; }
 
 public:
-    DBEntry *db_entry_{};
+    SharedPtr<DBEntry> db_entry_{};
 
 private:
     String db_name_{};
@@ -158,7 +171,8 @@ public:
     explicit AddTableEntryOperation(TxnTimeStamp begin_ts, bool is_delete, String db_name, String table_name, String table_entry_dir)
         : PhysicalWalOperation(begin_ts, is_delete), db_name_(std::move(db_name)), table_name_(std::move(table_name)),
           table_entry_dir_(std::move(table_entry_dir)) {}
-    explicit AddTableEntryOperation(TableEntry *table_entry) : table_entry_(table_entry) {}
+    explicit AddTableEntryOperation(SharedPtr<TableEntry> table_entry)
+        : PhysicalWalOperation(PhysicalWalOperationType::ADD_TABLE_ENTRY), table_entry_(table_entry) {}
     PhysicalWalOperationType GetType() override { return PhysicalWalOperationType::ADD_TABLE_ENTRY; }
     auto operator==(const PhysicalWalOperation &other) const -> bool override {
         const auto *other_cmd = dynamic_cast<const AddTableEntryOperation *>(&other);
@@ -170,9 +184,11 @@ public:
         return total_size;
     }
     void WriteAdv(char *&buf) const override;
+    void Snapshot() override;
+    const String ToString() const override { return "AddTableEntryOperation"; }
 
 public:
-    TableEntry *table_entry_{};
+    SharedPtr<TableEntry> table_entry_{};
 
 private:
     String db_name_{};
@@ -191,7 +207,8 @@ public:
                                       String segment_dir)
         : PhysicalWalOperation(begin_ts, is_delete), db_name_(std::move(db_name)), table_name_(std::move(table_name)), segment_id_(segment_id),
           segment_dir_(std::move(segment_dir)) {}
-    explicit AddSegmentEntryOperation(SegmentEntry *segment_entry) : segment_entry_(segment_entry) {}
+    explicit AddSegmentEntryOperation(SegmentEntry *segment_entry)
+        : PhysicalWalOperation(PhysicalWalOperationType::ADD_SEGMENT_ENTRY), segment_entry_(segment_entry) {}
     PhysicalWalOperationType GetType() override { return PhysicalWalOperationType::ADD_SEGMENT_ENTRY; }
     auto operator==(const PhysicalWalOperation &other) const -> bool override {
         const auto *other_cmd = dynamic_cast<const AddSegmentEntryOperation *>(&other);
@@ -204,6 +221,8 @@ public:
         return total_size;
     }
     void WriteAdv(char *&buf) const override;
+    void Snapshot() override;
+    const String ToString() const override { return "AddSegmentEntryOperation"; }
 
 public:
     SegmentEntry *segment_entry_{};
@@ -240,7 +259,8 @@ public:
                            u16 row_capacity)
         : PhysicalWalOperation(begin_ts, is_delete), db_name_(std::move(db_name)), table_name_(std::move(table_name)), segment_id_(segment_id),
           block_id_(block_id), block_dir_(std::move(block_dir)), row_count_(row_count), row_capacity_(row_capacity) {}
-    explicit AddBlockEntryOperation(BlockEntry *block_entry) : block_entry_(block_entry) {}
+    explicit AddBlockEntryOperation(BlockEntry *block_entry)
+        : PhysicalWalOperation(PhysicalWalOperationType::ADD_BLOCK_ENTRY), block_entry_(block_entry) {}
     PhysicalWalOperationType GetType() override { return PhysicalWalOperationType::ADD_BLOCK_ENTRY; }
     auto operator==(const PhysicalWalOperation &other) const -> bool override {
         const auto *other_cmd = dynamic_cast<const AddBlockEntryOperation *>(&other);
@@ -253,6 +273,8 @@ public:
         return total_size;
     }
     void WriteAdv(char *&buf) const override;
+    void Snapshot() override;
+    const String ToString() const override { return "AddBlockEntryOperation"; }
 
 public:
     BlockEntry *block_entry_{};
@@ -294,7 +316,8 @@ public:
                                      i32 next_line_idx)
         : PhysicalWalOperation(begin_ts, is_delete), db_name_(std::move(db_name)), table_name_(std::move(table_name)), segment_id_(segment_id),
           block_id_(block_id), column_id_(column_id), next_outline_idx_(next_line_idx) {}
-    explicit AddColumnEntryOperation(BlockColumnEntry *column_entry) : column_entry_(column_entry) {}
+    explicit AddColumnEntryOperation(BlockColumnEntry *column_entry)
+        : PhysicalWalOperation(PhysicalWalOperationType::ADD_COLUMN_ENTRY), column_entry_(column_entry) {}
 
     PhysicalWalOperationType GetType() override { return PhysicalWalOperationType::ADD_COLUMN_ENTRY; }
     auto operator==(const PhysicalWalOperation &other) const -> bool override {
@@ -309,6 +332,8 @@ public:
         return total_size;
     }
     void WriteAdv(char *&buf) const override;
+    void Snapshot() override;
+    const String ToString() const override { return "AddColumnEntryOperation"; }
 
 public:
     BlockColumnEntry *column_entry_{};
@@ -319,9 +344,6 @@ private:
     SegmentID segment_id_{};
     BlockID block_id_{};
     ColumnID column_id_{};
-
-private:
-    // For update
     i32 next_outline_idx_{-1}; // -1 for not having outline info
 };
 
@@ -333,8 +355,8 @@ public:
     // the same value to assist backward iterating.
     u32 checksum_{}; // crc32 of the entry, including the header and the
     // payload. User shall populate it before writing to wal.
-    i64 txn_id_{};    // txn id of the entry
-    i64 commit_ts_{}; // commit timestamp of the txn
+    TransactionID txn_id_{};   // txn id of the entry
+    TxnTimeStamp commit_ts_{}; // commit timestamp of the txn
     // TODO maybe add checkpoint ts for class member
 };
 
@@ -347,6 +369,7 @@ public:
     void WriteAdv(char *&ptr) const;
     static SharedPtr<PhysicalWalEntry> ReadAdv(char *&ptr, i32 max_bytes);
     [[nodiscard]] String ToString() const;
+    void Snapshot(TransactionID txn_id, TxnTimeStamp commit_ts);
 
     Vector<UniquePtr<PhysicalWalOperation>> &operations() { return operations_; }
 

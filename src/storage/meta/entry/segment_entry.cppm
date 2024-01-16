@@ -113,7 +113,7 @@ protected:
     void CommitDelete(TransactionID txn_id, TxnTimeStamp commit_ts, const HashMap<u16, Vector<RowID>> &block_row_hashmap);
 
 private:
-    static SharedPtr<String> DetermineSegmentDir(const String &parent_dir, u32 seg_id);
+    static SharedPtr<String> DetermineSegmentDir(const String &parent_dir, SegmentID seg_id);
 
 protected:
     std::shared_mutex rw_locker_{};
@@ -121,7 +121,7 @@ protected:
     const TableEntry *table_entry_{};
 
     SharedPtr<String> segment_dir_{};
-    u32 segment_id_{};
+    SegmentID segment_id_{};
 
     SizeT row_count_{};
     SizeT row_capacity_{};

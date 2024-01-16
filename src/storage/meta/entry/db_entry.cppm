@@ -35,7 +35,7 @@ class DBEntry : public BaseEntry {
 public:
     explicit DBEntry(const SharedPtr<String> &data_dir, const SharedPtr<String> &db_name, TransactionID txn_id, TxnTimeStamp begin_ts);
 
-    static UniquePtr<DBEntry>
+    static SharedPtr<DBEntry>
     NewDBEntry(const SharedPtr<String> &data_dir, const SharedPtr<String> &db_name, TransactionID txn_id, TxnTimeStamp begin_ts);
 
 public:

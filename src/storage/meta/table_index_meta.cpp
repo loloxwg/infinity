@@ -351,7 +351,7 @@ void TableIndexMeta::DeleteNewEntry(u64 txn_id, TxnManager *) {
     // `std::remove_if` move all elements that satisfy the predicate and move all the last element to the front of list. return value is the end of
     // the moved elements.
     auto removed_iter =
-        std::remove_if(this->entry_list_.begin(), this->entry_list_.end(), [&](UniquePtr<BaseEntry> &entry) { return entry->txn_id_ == txn_id; });
+        std::remove_if(this->entry_list_.begin(), this->entry_list_.end(), [&](SharedPtr<BaseEntry> &entry) { return entry->txn_id_ == txn_id; });
     // erase the all "moved" elements in the end of list
     this->entry_list_.erase(removed_iter, this->entry_list_.end());
 }

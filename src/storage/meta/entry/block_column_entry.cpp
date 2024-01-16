@@ -47,7 +47,7 @@ BlockColumnEntry::NewBlockColumnEntry(const BlockEntry *block_entry, ColumnID co
 
     if (txn != nullptr) {
         auto operation = MakeUnique<AddColumnEntryOperation>(block_column_entry.get());
-        txn->AddPhysicalWalOperation(std::move(operation));
+        txn->AddPhysicalOperation(std::move(operation));
     }
 
     block_column_entry->file_name_ = MakeShared<String>(std::to_string(column_id) + ".col");

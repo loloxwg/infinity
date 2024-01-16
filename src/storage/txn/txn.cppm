@@ -145,7 +145,9 @@ public:
 
     void AddWalCmd(const SharedPtr<WalCmd> &cmd);
 
-    void AddPhysicalWalOperation(UniquePtr<PhysicalWalOperation> operation);
+    void AddPhysicalOperation(UniquePtr<PhysicalWalOperation> operation);
+
+    void SubPhysicalOperation();
 
     void Checkpoint(const TxnTimeStamp max_commit_ts, bool is_full_checkpoint);
 

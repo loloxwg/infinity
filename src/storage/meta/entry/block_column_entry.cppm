@@ -51,6 +51,10 @@ public:
 
 public:
     // Getter
+    inline OutlineInfo* outline_info_ptr() const {
+        return outline_info_ ? outline_info_.get() : nullptr;
+    }
+    inline const BlockEntry *GetBlockEntry() const { return block_entry_; }
     inline const SharedPtr<DataType> &column_type() const { return column_type_; }
     inline BufferObj *buffer() const { return buffer_; }
     inline u64 column_id() const { return column_id_; }

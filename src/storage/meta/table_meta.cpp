@@ -78,8 +78,17 @@ Tuple<TableEntry *, Status> TableMeta::CreateNewEntry(TableEntryType table_entry
         this->entry_list_.emplace_back(std::move(dummy_entry));
 
         // Insert the new table entry
-        UniquePtr<TableEntry> table_entry =
-            MakeUnique<TableEntry>(this->db_entry_dir_, table_collection_name_ptr, columns, table_entry_type, this, txn_id, begin_ts);
+        SharedPtr<TableEntry> table_entry =
+            TableEntry::NewTableEntry(this->db_entry_dir_, table_collection_name_ptr, columns, table_entry_type, this, txn_id, begin_ts);
+
+        // physical wal log
+        {
+            if (txn_mgr != nullptr) {
+                auto operation = MakeUnique<AddTableEntryOperation>(table_entry);
+                txn_mgr->GetTxn(txn_id)->AddPhysicalOperation(std::move(operation));
+            }
+        }
+
         table_entry_ptr = table_entry.get();
         this->entry_list_.emplace_front(std::move(table_entry));
 
@@ -90,8 +99,17 @@ Tuple<TableEntry *, Status> TableMeta::CreateNewEntry(TableEntryType table_entry
         BaseEntry *header_base_entry = this->entry_list_.front().get();
         if (header_base_entry->entry_type_ == EntryType::kDummy) {
             // Dummy entry in the header of the list, insert the new table entry to the front.
-            UniquePtr<TableEntry> table_entry =
-                MakeUnique<TableEntry>(this->db_entry_dir_, table_collection_name_ptr, columns, table_entry_type, this, txn_id, begin_ts);
+            SharedPtr<TableEntry> table_entry =
+                TableEntry::NewTableEntry(this->db_entry_dir_, table_collection_name_ptr, columns, table_entry_type, this, txn_id, begin_ts);
+
+            // physical wal log
+            {
+                if (txn_mgr != nullptr) {
+                    auto operation = MakeUnique<AddTableEntryOperation>(table_entry);
+                    txn_mgr->GetTxn(txn_id)->AddPhysicalOperation(std::move(operation));
+                }
+            }
+
             table_entry_ptr = table_entry.get();
             this->entry_list_.emplace_front(std::move(table_entry));
             return {table_entry_ptr, Status::OK()};
@@ -103,8 +121,17 @@ Tuple<TableEntry *, Status> TableMeta::CreateNewEntry(TableEntryType table_entry
             if (begin_ts > header_table_entry->commit_ts_) {
                 if (header_table_entry->deleted_) {
                     // No conflict
-                    UniquePtr<TableEntry> table_entry =
-                        MakeUnique<TableEntry>(this->db_entry_dir_, table_collection_name_ptr, columns, table_entry_type, this, txn_id, begin_ts);
+                    SharedPtr<TableEntry> table_entry =
+                        TableEntry::NewTableEntry(this->db_entry_dir_, table_collection_name_ptr, columns, table_entry_type, this, txn_id, begin_ts);
+
+                    // physical wal log
+                    {
+                        if (txn_mgr != nullptr) {
+                            auto operation = MakeUnique<AddTableEntryOperation>(table_entry);
+                            txn_mgr->GetTxn(txn_id)->AddPhysicalOperation(std::move(operation));
+                        }
+                    }
+
                     table_entry_ptr = table_entry.get();
                     this->entry_list_.emplace_front(std::move(table_entry));
                     return {table_entry_ptr, Status::OK()};
@@ -132,13 +159,21 @@ Tuple<TableEntry *, Status> TableMeta::CreateNewEntry(TableEntryType table_entry
                     if (header_table_entry->txn_id_ == txn_id) {
                         // Same txn
                         if (header_table_entry->deleted_) {
-                            UniquePtr<TableEntry> table_entry = MakeUnique<TableEntry>(this->db_entry_dir_,
-                                                                                       table_collection_name_ptr,
-                                                                                       columns,
-                                                                                       table_entry_type,
-                                                                                       this,
-                                                                                       txn_id,
-                                                                                       begin_ts);
+                            SharedPtr<TableEntry> table_entry = TableEntry::NewTableEntry(this->db_entry_dir_,
+                                                                                          table_collection_name_ptr,
+                                                                                          columns,
+                                                                                          table_entry_type,
+                                                                                          this,
+                                                                                          txn_id,
+                                                                                          begin_ts);
+                            // physical wal log
+                            {
+                                if (txn_mgr != nullptr) {
+                                    auto operation = MakeUnique<AddTableEntryOperation>(table_entry);
+                                    txn_mgr->GetTxn(txn_id)->AddPhysicalOperation(std::move(operation));
+                                }
+                            }
+
                             table_entry_ptr = table_entry.get();
                             this->entry_list_.emplace_front(std::move(table_entry));
                             return {table_entry_ptr, Status::OK()};
@@ -163,12 +198,22 @@ Tuple<TableEntry *, Status> TableMeta::CreateNewEntry(TableEntryType table_entry
                 }
                 case TxnState::kRollbacking:
                 case TxnState::kRollbacked: {
+                    // TODO Consider whether it is necessary to add physical logs
                     // Remove the header entry
                     this->entry_list_.erase(this->entry_list_.begin());
 
                     // Append new one
-                    UniquePtr<TableEntry> table_entry =
-                        MakeUnique<TableEntry>(this->db_entry_dir_, table_collection_name_ptr, columns, table_entry_type, this, txn_id, begin_ts);
+                    SharedPtr<TableEntry> table_entry =
+                        TableEntry::NewTableEntry(this->db_entry_dir_, table_collection_name_ptr, columns, table_entry_type, this, txn_id, begin_ts);
+
+                    // physical wal log
+                    {
+                        if (txn_mgr != nullptr) {
+                            auto operation = MakeUnique<AddTableEntryOperation>(table_entry);
+                            txn_mgr->GetTxn(txn_id)->AddPhysicalOperation(std::move(operation));
+                        }
+                    }
+
                     table_entry_ptr = table_entry.get();
                     this->entry_list_.emplace_front(std::move(table_entry));
                     return {table_entry_ptr, Status::OK()};
@@ -219,8 +264,16 @@ TableMeta::DropNewEntry(TransactionID txn_id, TxnTimeStamp begin_ts, TxnManager 
 
             Vector<SharedPtr<ColumnDef>> dummy_columns;
 
-            UniquePtr<TableEntry> table_entry =
+            SharedPtr<TableEntry> table_entry =
                 TableEntry::NewTableEntry(this->db_entry_dir_, this->table_name_, dummy_columns, TableEntryType::kTableEntry, this, txn_id, begin_ts);
+            // physical wal log
+            {
+                if (txn_mgr != nullptr) {
+                    auto operation = MakeUnique<AddTableEntryOperation>(table_entry);
+                    txn_mgr->GetTxn(txn_id)->AddPhysicalOperation(std::move(operation));
+                }
+            }
+
             table_entry_ptr = table_entry.get();
             table_entry_ptr->deleted_ = true;
             this->entry_list_.emplace_front(std::move(table_entry));
@@ -238,9 +291,20 @@ TableMeta::DropNewEntry(TransactionID txn_id, TxnTimeStamp begin_ts, TxnManager 
         if (txn_id == header_table_entry->txn_id_) {
             // Same txn, remove the header table entry
             table_entry_ptr = header_table_entry;
+
+            auto base_entry_ptr_iter = this->entry_list_.begin();
+            auto table_entry_ptr = std::dynamic_pointer_cast<TableEntry>(*base_entry_ptr_iter);
+
+            // Physical log
+            {
+                if (txn_mgr != nullptr) {
+                    auto operation = MakeUnique<AddTableEntryOperation>(table_entry_ptr);
+                    txn_mgr->GetTxn(txn_id)->AddPhysicalOperation(std::move(operation));
+                }
+            }
             this->entry_list_.erase(this->entry_list_.begin());
 
-            return {table_entry_ptr, Status::OK()};
+            return {table_entry_ptr.get(), Status::OK()};
         } else {
             // Not same txn, issue WW conflict
             UniquePtr<String> err_msg = MakeUnique<String>(fmt::format("Write-write conflict: There is another uncommitted table entry."));
@@ -257,7 +321,7 @@ void TableMeta::DeleteNewEntry(u64 txn_id, TxnManager *) {
         return;
     }
 
-    auto removed_iter = std::remove_if(this->entry_list_.begin(), this->entry_list_.end(), [&](UniquePtr<BaseEntry> &entry) -> bool {
+    auto removed_iter = std::remove_if(this->entry_list_.begin(), this->entry_list_.end(), [&](SharedPtr<BaseEntry> &entry) -> bool {
         return entry->txn_id_ == txn_id;
     });
 
@@ -372,7 +436,7 @@ UniquePtr<TableMeta> TableMeta::Deserialize(const nlohmann::json &table_meta_jso
             res->entry_list_.emplace_back(std::move(table_entry));
         }
     }
-    res->entry_list_.sort([](const UniquePtr<BaseEntry> &ent1, const UniquePtr<BaseEntry> &ent2) { return ent1->commit_ts_ > ent2->commit_ts_; });
+    res->entry_list_.sort([](const SharedPtr<BaseEntry> &ent1, const SharedPtr<BaseEntry> &ent2) { return ent1->commit_ts_ > ent2->commit_ts_; });
     UniquePtr<BaseEntry> dummy_entry = MakeUnique<BaseEntry>(EntryType::kDummy);
     dummy_entry->deleted_ = true;
     res->entry_list_.emplace_back(std::move(dummy_entry));

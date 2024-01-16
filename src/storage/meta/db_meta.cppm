@@ -58,7 +58,7 @@ private:
     Tuple<DBEntry *, Status> GetEntry(TransactionID txn_id, TxnTimeStamp begin_ts);
 
     // Thread-unsafe
-    List<UniquePtr<BaseEntry>> &entry_list() { return entry_list_; }
+    List<SharedPtr<BaseEntry>> &entry_list() { return entry_list_; }
 
     // Used in initialization phase
     static void AddEntry(DBMeta *db_meta, UniquePtr<BaseEntry> db_entry);
@@ -69,7 +69,7 @@ private:
 
     std::shared_mutex rw_locker_{};
     // Ordered by commit_ts from latest to oldest.
-    List<UniquePtr<BaseEntry>> entry_list_{};
+    List<SharedPtr<BaseEntry>> entry_list_{};
 };
 
 } // namespace infinity

@@ -118,6 +118,8 @@ protected:
 
 public:
     // Getter
+    inline const SegmentEntry *GetSegmentEntry() const { return segment_entry_; }
+
     inline SizeT row_count() const { return row_count_; }
 
     inline SizeT row_capacity() const { return row_capacity_; }

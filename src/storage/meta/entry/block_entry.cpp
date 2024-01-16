@@ -123,7 +123,7 @@ UniquePtr<BlockEntry> BlockEntry::NewBlockEntry(const SegmentEntry *segment_entr
 
     if (txn != nullptr) {
         auto operation = MakeUnique<AddBlockEntryOperation>(block_entry.get());
-        txn->AddPhysicalWalOperation(std::move(operation));
+        txn->AddPhysicalOperation(std::move(operation));
     }
 
     block_entry->block_dir_ = BlockEntry::DetermineDir(*segment_entry->segment_dir(), block_id);

@@ -53,7 +53,7 @@ public:
                         TransactionID txn_id,
                         TxnTimeStamp begin_ts);
 
-    static UniquePtr<TableEntry> NewTableEntry(const SharedPtr<String> &db_entry_dir,
+    static SharedPtr<TableEntry> NewTableEntry(const SharedPtr<String> &db_entry_dir,
                                                SharedPtr<String> table_collection_name,
                                                const Vector<SharedPtr<ColumnDef>> &columns,
                                                TableEntryType table_entry_type,
@@ -164,7 +164,7 @@ protected:
 
     // From data table
     Atomic<SizeT> row_count_{};
-    Map<u32, SharedPtr<SegmentEntry>> segment_map_{};
+    Map<SegmentID, SharedPtr<SegmentEntry>> segment_map_{};
     SegmentEntry *unsealed_segment_{};
     atomic_u32 next_segment_id_{};
 

@@ -62,7 +62,7 @@ SharedPtr<SegmentEntry> SegmentEntry::NewSegmentEntry(const TableEntry *table_en
     SharedPtr<SegmentEntry> segment_entry = MakeShared<SegmentEntry>(table_entry);
     if (txn != nullptr) {
         auto operation = MakeUnique<AddSegmentEntryOperation>(segment_entry.get());
-        txn->AddPhysicalWalOperation(std::move(operation));
+        txn->AddPhysicalOperation(std::move(operation));
     }
     segment_entry->row_count_ = 0;
     segment_entry->row_capacity_ = DEFAULT_SEGMENT_CAPACITY;

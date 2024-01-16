@@ -28,6 +28,7 @@ import infinity_exception;
 import stl;
 import parser;
 import third_party;
+import logger;
 
 namespace infinity {
 
@@ -172,7 +173,7 @@ void AddSegmentEntryOperation::WriteAdv(char *&buf) const {
     WriteBufAdv(buf, this->is_delete_);
 }
 
-void AddBlockEntryOperation ::WriteAdv(char *&buf) const {
+void AddBlockEntryOperation::WriteAdv(char *&buf) const {
     WriteBufAdv(buf, PhysicalWalOperationType::ADD_BLOCK_ENTRY);
     WriteBufAdv(buf, this->db_name_);
     WriteBufAdv(buf, this->table_name_);
@@ -197,6 +198,69 @@ void AddColumnEntryOperation::WriteAdv(char *&buf) const {
 
     WriteBufAdv(buf, this->begin_ts_);
     WriteBufAdv(buf, this->is_delete_);
+}
+
+void AddDatabaseMetaOperation::Snapshot() {
+    this->db_name_ = *this->db_meta_->db_name();
+    this->data_dir_ = *this->db_meta_->data_dir();
+}
+
+void AddTableMetaOperation::Snapshot() {
+    this->table_name_ = this->table_meta_->table_name();
+    this->db_entry_dir_ = this->table_meta_->db_entry_dir();
+}
+
+void AddDatabaseEntryOperation::Snapshot() {
+    if (is_flushed_) {
+        return;
+    }
+    String db_name = db_entry_->db_name();
+    String db_entry_dir_ = db_entry_->db_entry_dir();
+    this->db_name_ = db_name;
+    this->db_entry_dir_ = db_entry_dir_;
+    is_flushed_ = true;
+}
+
+void AddTableEntryOperation::Snapshot() {
+    if (is_flushed_) {
+        return;
+    }
+    this->db_name_ = *this->table_entry_->GetDBName();
+    this->table_name_ = *this->table_entry_->GetTableName();
+    this->table_entry_dir_ = *this->table_entry_->TableEntryDir();
+    is_flushed_ = true;
+}
+
+void AddSegmentEntryOperation::Snapshot() {
+    if (is_flushed_) {
+        return;
+    }
+    this->db_name_ = *this->segment_entry_->GetTableEntry()->GetDBName();
+    this->table_name_ = *this->segment_entry_->GetTableEntry()->GetTableName();
+    this->segment_id_ = this->segment_entry_->segment_id();
+    this->segment_dir_ = this->segment_entry_->DirPath();
+    is_flushed_ = true;
+}
+
+void AddBlockEntryOperation::Snapshot() {
+    this->db_name_ = *this->block_entry_->GetSegmentEntry()->GetTableEntry()->GetDBName();
+    this->table_name_ = *this->block_entry_->GetSegmentEntry()->GetTableEntry()->GetTableName();
+    this->segment_id_ = this->block_entry_->GetSegmentEntry()->segment_id();
+    this->block_id_ = this->block_entry_->block_id();
+    this->block_dir_ = this->block_entry_->DirPath();
+    this->row_count_ = this->block_entry_->row_count();
+    this->row_capacity_ = this->block_entry_->row_capacity();
+}
+
+void AddColumnEntryOperation::Snapshot() {
+    this->db_name_ = *this->column_entry_->GetBlockEntry()->GetSegmentEntry()->GetTableEntry()->GetDBName();
+    this->table_name_ = *this->column_entry_->GetBlockEntry()->GetSegmentEntry()->GetTableEntry()->GetTableName();
+    this->segment_id_ = this->column_entry_->GetBlockEntry()->GetSegmentEntry()->segment_id();
+    this->block_id_ = this->column_entry_->GetBlockEntry()->block_id();
+    this->column_id_ = this->column_entry_->column_id();
+    if (this->column_entry_->outline_info_ptr() != nullptr) {
+        this->next_outline_idx_ = this->column_entry_->outline_info_ptr()->next_file_idx;
+    }
 }
 
 /// class PhysicalWalEntry
@@ -296,4 +360,15 @@ void PhysicalWalEntry::WriteAdv(char *&ptr) const {
     // little-endian machine.
     header->checksum_ = CRC32IEEE::makeCRC(reinterpret_cast<const unsigned char *>(saved_ptr), size);
 }
+
+void PhysicalWalEntry::Snapshot(TransactionID txn_id, TxnTimeStamp commit_ts) {
+
+    this->commit_ts_ = commit_ts;
+    this->txn_id_ = txn_id;
+    for (auto &operation : operations_) {
+        LOG_TRACE(fmt::format("Snapshot operation {}", operation->ToString()));
+        operation->Snapshot();
+    }
+}
+
 } // namespace infinity

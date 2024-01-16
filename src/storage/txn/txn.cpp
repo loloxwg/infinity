@@ -146,9 +146,6 @@ Status Txn::CreateDatabase(const String &db_name, ConflictType conflict_type) {
     txn_dbs_.insert(db_entry);
     db_names_.insert(db_name);
     wal_entry_->cmds_.push_back(MakeShared<WalCmdCreateDatabase>(db_name));
-
-    auto operation = MakeUnique<AddDatabaseEntryOperation>(db_entry);
-    this->AddPhysicalWalOperation(std::move(operation));
     return Status::OK();
 }
 
@@ -178,9 +175,8 @@ Status Txn::DropDatabase(const String &db_name, ConflictType) {
     } else {
         db_names_.insert(db_name);
     }
+
     wal_entry_->cmds_.push_back(MakeShared<WalCmdDropDatabase>(db_name));
-    auto operation = MakeUnique<AddDatabaseEntryOperation>(dropped_db_entry);
-    this->AddPhysicalWalOperation(std::move(operation));
     return Status::OK();
 }
 
@@ -246,8 +242,6 @@ Status Txn::CreateTable(const String &db_name, const SharedPtr<TableDef> &table_
     txn_tables_.insert(table_entry);
     wal_entry_->cmds_.push_back(MakeShared<WalCmdCreateTable>(db_name, table_def));
 
-    auto operation = MakeUnique<AddTableEntryOperation>(table_entry);
-    this->AddPhysicalWalOperation(std::move(operation));
     return Status::OK();
 }
 
@@ -273,9 +267,6 @@ Status Txn::DropTableCollectionByName(const String &db_name, const String &table
     }
 
     wal_entry_->cmds_.push_back(MakeShared<WalCmdDropTable>(db_name, table_name));
-
-    auto operation = MakeUnique<AddTableEntryOperation>(table_entry);
-    this->AddPhysicalWalOperation(std::move(operation));
     return Status::OK();
 }
 
@@ -474,6 +465,16 @@ void Txn::CommitBottom() {
     for (const auto &[index_name, table_index_entry] : txn_indexes_) {
         table_index_entry->Commit(commit_ts);
     }
+
+    // Snapshot the physical operations in one txn
+    Vector<UniquePtr<PhysicalWalOperation>> &operations = local_physical_wal_entry_->operations();
+    for (auto &operation : operations) {
+        String opt = operation->ToString();
+        LOG_INFO(fmt::format("PhysicalWalOperation: {}", opt));
+
+        operation->Snapshot();
+    }
+    //    local_physical_wal_entry_->Snapshot(txn_id_, commit_ts);
     LOG_INFO(fmt::format("Txn: {} is committed.", txn_id_));
 
     // Notify the top half
@@ -526,9 +527,11 @@ void Txn::Rollback() {
 
 void Txn::AddWalCmd(const SharedPtr<WalCmd> &cmd) { wal_entry_->cmds_.push_back(cmd); }
 
-void Txn::AddPhysicalWalOperation(UniquePtr<PhysicalWalOperation> operation) {
+void Txn::AddPhysicalOperation(UniquePtr<PhysicalWalOperation> operation) {
     local_physical_wal_entry_->operations().emplace_back(std::move(operation));
 }
+
+void Txn::SubPhysicalOperation() { local_physical_wal_entry_->operations().pop_back(); }
 
 void Txn::Checkpoint(const TxnTimeStamp max_commit_ts, bool is_full_checkpoint) {
     String dir_name = *txn_mgr_->GetBufferMgr()->BaseDir().get() + "/catalog";

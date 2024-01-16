@@ -45,10 +45,10 @@ DBEntry::DBEntry(const SharedPtr<String> &data_dir, const SharedPtr<String> &db_
     txn_id_ = txn_id;
 }
 
-UniquePtr<DBEntry>
+SharedPtr<DBEntry>
 DBEntry::NewDBEntry(const SharedPtr<String> &data_dir, const SharedPtr<String> &db_name, TransactionID txn_id, TxnTimeStamp begin_ts) {
 
-    auto db_entry = MakeUnique<DBEntry>(data_dir, db_name, txn_id, begin_ts);
+    auto db_entry = MakeShared<DBEntry>(data_dir, db_name, txn_id, begin_ts);
     return db_entry;
 }
 
@@ -80,7 +80,7 @@ Tuple<TableEntry *, Status> DBEntry::CreateTable(TableEntryType table_entry_type
 
         if (txn_mgr != nullptr) {
             auto operation = MakeUnique<AddTableMetaOperation>(table_meta);
-            txn_mgr->GetTxn(txn_id)->AddPhysicalWalOperation(std::move(operation));
+            txn_mgr->GetTxn(txn_id)->AddPhysicalOperation(std::move(operation));
         }
 
         this->rw_locker_.lock();

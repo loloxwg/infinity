@@ -76,12 +76,12 @@ private:
 
 public:
     String index_name() const { return *index_name_; }
-    List <UniquePtr<BaseEntry>> &entry_list() { return entry_list_; }
+    List <SharedPtr<BaseEntry>> &entry_list() { return entry_list_; }
 private:
     SharedPtr<String> index_name_{};
     TableEntry *table_entry_{};
 
     std::shared_mutex rw_locker_{};
-    List<UniquePtr<BaseEntry>> entry_list_{};
+    List<SharedPtr<BaseEntry>> entry_list_{};
 };
 } // namespace infinity

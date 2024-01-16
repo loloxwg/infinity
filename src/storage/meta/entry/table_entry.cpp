@@ -60,7 +60,7 @@ TableEntry::TableEntry(const SharedPtr<String> &db_entry_dir,
     txn_id_ = txn_id;
 }
 
-UniquePtr<TableEntry> TableEntry::NewTableEntry(const SharedPtr<String> &db_entry_dir,
+SharedPtr<TableEntry> TableEntry::NewTableEntry(const SharedPtr<String> &db_entry_dir,
                                                 SharedPtr<String> table_collection_name,
                                                 const Vector<SharedPtr<ColumnDef>> &columns,
                                                 TableEntryType table_entry_type,
@@ -68,7 +68,7 @@ UniquePtr<TableEntry> TableEntry::NewTableEntry(const SharedPtr<String> &db_entr
                                                 TransactionID txn_id,
                                                 TxnTimeStamp begin_ts) {
 
-    auto table_entry = MakeUnique<TableEntry>(db_entry_dir, table_collection_name, columns, table_entry_type, table_meta, txn_id, begin_ts);
+    auto table_entry = MakeShared<TableEntry>(db_entry_dir, table_collection_name, columns, table_entry_type, table_meta, txn_id, begin_ts);
     return table_entry;
 }
 
