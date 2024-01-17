@@ -200,49 +200,108 @@ void AddColumnEntryOperation::WriteAdv(char *&buf) const {
     WriteBufAdv(buf, this->is_delete_);
 }
 
+void AddIndexMetaOperation::WriteAdv(char *&buf) const {
+    WriteBufAdv(buf, PhysicalWalOperationType::ADD_INDEX_META);
+    WriteBufAdv(buf, this->db_name_);
+    WriteBufAdv(buf, this->table_name_);
+    WriteBufAdv(buf, this->index_name_);
+    WriteBufAdv(buf, this->begin_ts_);
+    WriteBufAdv(buf, this->is_delete_);
+}
+
+void AddTableIndexEntryOperation::WriteAdv(char *&buf) const {
+    WriteBufAdv(buf, PhysicalWalOperationType::ADD_TABLE_INDEX_ENTRY);
+    WriteBufAdv(buf, this->index_name_);
+    WriteBufAdv(buf, this->index_dir_);
+    WriteBufAdv(buf, this->begin_ts_);
+    WriteBufAdv(buf, this->is_delete_);
+}
+
+void AddIrsIndexEntryOperation::WriteAdv(char *&buf) const {
+    WriteBufAdv(buf, PhysicalWalOperationType::ADD_IRS_INDEX_ENTRY);
+    WriteBufAdv(buf, this->index_name_);
+    WriteBufAdv(buf, this->index_dir_);
+    WriteBufAdv(buf, this->begin_ts_);
+    WriteBufAdv(buf, this->is_delete_);
+}
+
+void AddColumnIndexEntryOperation::WriteAdv(char *&buf) const {
+    WriteBufAdv(buf, PhysicalWalOperationType::ADD_COLUMN_INDEX_ENTRY);
+    WriteBufAdv(buf, this->db_name_);
+    WriteBufAdv(buf, this->table_name_);
+    WriteBufAdv(buf, this->index_name_);
+    WriteBufAdv(buf, this->column_id_);
+    WriteBufAdv(buf, this->begin_ts_);
+    WriteBufAdv(buf, this->is_delete_);
+}
+
+void AddSegmentColumnIndexEntryOperation::WriteAdv(char *&buf) const {
+    WriteBufAdv(buf, PhysicalWalOperationType::ADD_SEGMENT_COLUMN_INDEX_ENTRY);
+    WriteBufAdv(buf, this->db_name_);
+    WriteBufAdv(buf, this->table_name_);
+    WriteBufAdv(buf, this->index_name_);
+    WriteBufAdv(buf, this->column_id_);
+    WriteBufAdv(buf, this->segment_id_);
+    WriteBufAdv(buf, this->min_ts_);
+    WriteBufAdv(buf, this->max_ts_);
+    WriteBufAdv(buf, this->begin_ts_);
+    WriteBufAdv(buf, this->is_delete_);
+}
+
 void AddDatabaseMetaOperation::Snapshot() {
+    if (is_snapshotted_) {
+        return;
+    }
     this->db_name_ = *this->db_meta_->db_name();
     this->data_dir_ = *this->db_meta_->data_dir();
+    is_snapshotted_ = true;
 }
 
 void AddTableMetaOperation::Snapshot() {
+    if (is_snapshotted_) {
+        return;
+    }
     this->table_name_ = this->table_meta_->table_name();
     this->db_entry_dir_ = this->table_meta_->db_entry_dir();
+    is_snapshotted_ = true;
 }
 
 void AddDatabaseEntryOperation::Snapshot() {
-    if (is_flushed_) {
+    if (is_snapshotted_) {
         return;
     }
     String db_name = db_entry_->db_name();
     String db_entry_dir_ = db_entry_->db_entry_dir();
     this->db_name_ = db_name;
     this->db_entry_dir_ = db_entry_dir_;
-    is_flushed_ = true;
+    is_snapshotted_ = true;
 }
 
 void AddTableEntryOperation::Snapshot() {
-    if (is_flushed_) {
+    if (is_snapshotted_) {
         return;
     }
     this->db_name_ = *this->table_entry_->GetDBName();
     this->table_name_ = *this->table_entry_->GetTableName();
     this->table_entry_dir_ = *this->table_entry_->TableEntryDir();
-    is_flushed_ = true;
+    is_snapshotted_ = true;
 }
 
 void AddSegmentEntryOperation::Snapshot() {
-    if (is_flushed_) {
+    if (is_snapshotted_) {
         return;
     }
     this->db_name_ = *this->segment_entry_->GetTableEntry()->GetDBName();
     this->table_name_ = *this->segment_entry_->GetTableEntry()->GetTableName();
     this->segment_id_ = this->segment_entry_->segment_id();
     this->segment_dir_ = this->segment_entry_->DirPath();
-    is_flushed_ = true;
+    is_snapshotted_ = true;
 }
 
 void AddBlockEntryOperation::Snapshot() {
+    if (is_snapshotted_) {
+        return;
+    }
     this->db_name_ = *this->block_entry_->GetSegmentEntry()->GetTableEntry()->GetDBName();
     this->table_name_ = *this->block_entry_->GetSegmentEntry()->GetTableEntry()->GetTableName();
     this->segment_id_ = this->block_entry_->GetSegmentEntry()->segment_id();
@@ -250,9 +309,13 @@ void AddBlockEntryOperation::Snapshot() {
     this->block_dir_ = this->block_entry_->DirPath();
     this->row_count_ = this->block_entry_->row_count();
     this->row_capacity_ = this->block_entry_->row_capacity();
+    is_snapshotted_ = true;
 }
 
 void AddColumnEntryOperation::Snapshot() {
+    if (is_snapshotted_) {
+        return;
+    }
     this->db_name_ = *this->column_entry_->GetBlockEntry()->GetSegmentEntry()->GetTableEntry()->GetDBName();
     this->table_name_ = *this->column_entry_->GetBlockEntry()->GetSegmentEntry()->GetTableEntry()->GetTableName();
     this->segment_id_ = this->column_entry_->GetBlockEntry()->GetSegmentEntry()->segment_id();
@@ -261,6 +324,68 @@ void AddColumnEntryOperation::Snapshot() {
     if (this->column_entry_->outline_info_ptr() != nullptr) {
         this->next_outline_idx_ = this->column_entry_->outline_info_ptr()->next_file_idx;
     }
+    is_snapshotted_ = true;
+}
+
+/// Related to index
+void AddIndexMetaOperation::Snapshot() {
+    if (is_snapshotted_) {
+        return;
+    }
+    this->db_name_ = *this->index_meta_->GetTableEntry()->GetDBName();
+    this->table_name_ = *this->index_meta_->GetTableEntry()->GetTableName();
+    this->index_name_ = this->index_meta_->index_name();
+    is_snapshotted_ = true;
+}
+
+void AddTableIndexEntryOperation::Snapshot() {
+    if (is_snapshotted_) {
+        return;
+    }
+    this->db_name_ = *this->table_index_entry_->table_index_meta()->GetTableEntry()->GetDBName();
+    this->table_name_ = *this->table_index_entry_->table_index_meta()->GetTableEntry()->GetTableName();
+    this->index_name_ = this->table_index_entry_->table_index_meta()->index_name();
+    this->index_dir_ = *this->table_index_entry_->index_dir();
+    this->index_def_ = this->table_index_entry_->table_index_def();
+    is_snapshotted_ = true;
+}
+
+void AddIrsIndexEntryOperation::Snapshot() {
+    if (is_snapshotted_) {
+        return;
+    }
+    this->db_name_ = *this->irs_index_entry_->table_index_entry()->table_index_meta()->GetTableEntry()->GetDBName();
+    this->table_name_ = *this->irs_index_entry_->table_index_entry()->table_index_meta()->GetTableEntry()->GetTableName();
+    this->index_name_ = this->irs_index_entry_->table_index_entry()->table_index_meta()->index_name();
+    this->index_dir_ = this->irs_index_entry_->index_dir();
+    is_snapshotted_ = true;
+}
+
+void AddColumnIndexEntryOperation::Snapshot() {
+    if (is_snapshotted_) {
+        return;
+    }
+    this->db_name_ = *this->column_index_entry_->table_index_entry()->table_index_meta()->GetTableEntry()->GetDBName();
+    this->table_name_ = *this->column_index_entry_->table_index_entry()->table_index_meta()->GetTableEntry()->GetTableName();
+    this->index_name_ = this->column_index_entry_->table_index_entry()->table_index_meta()->index_name();
+    this->col_index_dir_ = *this->column_index_entry_->col_index_dir();
+    this->column_id_ = this->column_index_entry_->column_id();
+    is_snapshotted_ = true;
+}
+
+void AddSegmentColumnIndexEntryOperation::Snapshot() {
+    if (is_snapshotted_) {
+        return;
+    }
+    this->db_name_ = *this->segment_column_index_entry_->column_index_entry()->table_index_entry()->table_index_meta()->GetTableEntry()->GetDBName();
+    this->table_name_ =
+        *this->segment_column_index_entry_->column_index_entry()->table_index_entry()->table_index_meta()->GetTableEntry()->GetTableName();
+    this->index_name_ = this->segment_column_index_entry_->column_index_entry()->table_index_entry()->table_index_meta()->index_name();
+    this->column_id_ = this->segment_column_index_entry_->column_index_entry()->column_id();
+    this->segment_id_ = this->segment_column_index_entry_->segment_id();
+    this->min_ts_=this->segment_column_index_entry_->min_ts();
+    this->max_ts_= this->segment_column_index_entry_->max_ts();
+    is_snapshotted_ = true;
 }
 
 /// class PhysicalWalEntry
@@ -363,6 +488,7 @@ void PhysicalWalEntry::WriteAdv(char *&ptr) const {
 
 void PhysicalWalEntry::Snapshot(TransactionID txn_id, TxnTimeStamp commit_ts) {
 
+    LOG_INFO(fmt::format("Snapshot txn_id {} commit_ts {}", txn_id, commit_ts));
     this->commit_ts_ = commit_ts;
     this->txn_id_ = txn_id;
     for (auto &operation : operations_) {

@@ -86,11 +86,11 @@ NewCatalog::CreateDatabase(const String &db_name, TransactionID txn_id, TxnTimeS
         auto db_dir = MakeShared<String>(parent_path.string());
         // Physical wal log
         UniquePtr<DBMeta> new_db_meta = DBMeta::NewDBMeta(db_dir, MakeShared<String>(db_name));
+
         if (txn_mgr != nullptr) {
             auto operation = MakeUnique<AddDatabaseMetaOperation>(new_db_meta.get());
             LOG_TRACE(fmt::format("Add new AddDatabaseMeta Operation: {}", operation->ToString()));
             txn_mgr->GetTxn(txn_id)->AddPhysicalOperation(std::move(operation));
-
         }
 
         db_meta = new_db_meta.get();

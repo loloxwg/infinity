@@ -95,7 +95,16 @@ Tuple<TableIndexEntry *, Status> TableEntry::CreateIndex(const SharedPtr<IndexDe
 
     if (table_index_meta == nullptr) {
 
-        auto new_table_index_meta = MakeUnique<TableIndexMeta>(this, index_def->index_name_);
+        UniquePtr<TableIndexMeta> new_table_index_meta = TableIndexMeta::NewTableIndexMeta(this, index_def->index_name_);
+
+        {
+            if (txn_mgr != nullptr) {
+                auto operation = MakeUnique<AddIndexMetaOperation>(new_table_index_meta.get());
+                LOG_TRACE(fmt::format("Add new AddDatabaseMeta Operation: {}", operation->ToString()));
+                txn_mgr->GetTxn(txn_id)->AddPhysicalOperation(std::move(operation));
+            }
+        }
+
         table_index_meta = new_table_index_meta.get();
 
         this->rw_locker_.lock();

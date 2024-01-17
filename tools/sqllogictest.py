@@ -132,13 +132,13 @@ if __name__ == "__main__":
     print("Generate file finshed.")
 
     # Install py sdk
-    print("")
     os.system(f"pip install infinity_sdk")
 
     print("Start copying data...")
     if args.just_copy_all_data is True:
         copy_all(args.data, args.copy)
     else:
+        copy_all(args.data, args.copy)
         print("Start testing...")
         start = time.time()
         python_skd_test(python_test_dir)

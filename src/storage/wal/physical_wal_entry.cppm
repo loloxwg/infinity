@@ -27,6 +27,7 @@ import parser;
 import infinity_exception;
 import catalog;
 import outline_info;
+import third_party;
 
 namespace infinity {
 
@@ -37,6 +38,7 @@ export enum class PhysicalWalOperationType : i8 {
     // -----------------------------
     ADD_DATABASE_META = 1,
     ADD_TABLE_META = 2,
+    ADD_INDEX_META = 3,
     // -----------------------------
     // Entry
     // -----------------------------
@@ -49,10 +51,10 @@ export enum class PhysicalWalOperationType : i8 {
     // -----------------------------
     // INDEX
     // -----------------------------
-    ADD_TABLE_INDEX = 21,
-    ADD_INDEX_ENTRY = 22,
-    ADD_COLUMN_INDEX = 23,
-    ADD_INDEX_BY_SEGMENT_ID = 24,
+    ADD_TABLE_INDEX_ENTRY = 21,
+    ADD_IRS_INDEX_ENTRY = 22,
+    ADD_COLUMN_INDEX_ENTRY = 23,
+    ADD_SEGMENT_COLUMN_INDEX_ENTRY = 24,
 };
 
 /// class PhysicalWalOperation
@@ -76,7 +78,7 @@ public:
     TxnTimeStamp begin_ts_{0};
     bool is_delete_{false};
     bool is_flushed_{false};
-    bool is_snapshoted_{false};
+    bool is_snapshotted_{false};
     PhysicalWalOperationType type_{};
 };
 
@@ -345,6 +347,182 @@ private:
     BlockID block_id_{};
     ColumnID column_id_{};
     i32 next_outline_idx_{-1}; // -1 for not having outline info
+};
+
+class TableIndexMeta;
+/// class AddIndexMetaOperation
+export class AddIndexMetaOperation : public PhysicalWalOperation {
+public:
+    explicit AddIndexMetaOperation(TxnTimeStamp begin_ts, bool is_delete, String db_name, String table_name, String index_name)
+        : PhysicalWalOperation(begin_ts, is_delete), db_name_(std::move(db_name)), table_name_(std::move(table_name)),
+          index_name_(std::move(index_name)) {}
+    explicit AddIndexMetaOperation(TableIndexMeta *index_meta)
+        : PhysicalWalOperation(PhysicalWalOperationType::ADD_INDEX_META), index_meta_(index_meta) {}
+    PhysicalWalOperationType GetType() override { return PhysicalWalOperationType::ADD_INDEX_META; }
+    auto operator==(const PhysicalWalOperation &other) const -> bool override {
+        const auto *other_cmd = dynamic_cast<const AddIndexMetaOperation *>(&other);
+        return other_cmd != nullptr && IsEqual(db_name_, other_cmd->db_name_) && IsEqual(table_name_, other_cmd->table_name_) &&
+               IsEqual(index_name_, other_cmd->index_name_);
+    }
+    [[nodiscard]] SizeT GetSizeInBytes() const override {
+        auto total_size = sizeof(PhysicalWalOperationType) + sizeof(i32) + this->db_name_.size() + sizeof(i32) + this->table_name_.size() +
+                          sizeof(i32) + this->index_name_.size() + GetBaseSizeInBytes();
+        return total_size;
+    }
+    void WriteAdv(char *&buf) const override;
+    void Snapshot() override;
+    const String ToString() const override { return "AddIndexMetaOperation"; }
+
+public:
+    TableIndexMeta *index_meta_{};
+
+private:
+    String db_name_{};
+    String table_name_{};
+    String index_name_{};
+};
+
+/// class AddTableIndexEntryOperation
+export class AddTableIndexEntryOperation : public PhysicalWalOperation {
+public:
+    explicit AddTableIndexEntryOperation(TxnTimeStamp begin_ts, bool is_delete, String db_name, String table_name, String index_name)
+        : PhysicalWalOperation(begin_ts, is_delete), db_name_(std::move(db_name)), table_name_(std::move(table_name)),
+          index_name_(std::move(index_name)) {}
+    explicit AddTableIndexEntryOperation(SharedPtr<TableIndexEntry> table_index_entry)
+        : PhysicalWalOperation(PhysicalWalOperationType::ADD_TABLE_INDEX_ENTRY), table_index_entry_(table_index_entry) {}
+    PhysicalWalOperationType GetType() override { return PhysicalWalOperationType::ADD_TABLE_INDEX_ENTRY; }
+    auto operator==(const PhysicalWalOperation &other) const -> bool override {
+        const auto *other_cmd = dynamic_cast<const AddTableIndexEntryOperation *>(&other);
+        return other_cmd != nullptr && IsEqual(db_name_, other_cmd->db_name_) && IsEqual(table_name_, other_cmd->table_name_) &&
+               IsEqual(index_name_, other_cmd->index_name_);
+    }
+    [[nodiscard]] SizeT GetSizeInBytes() const override {
+        auto total_size = sizeof(PhysicalWalOperationType) + sizeof(i32) + this->db_name_.size() + sizeof(i32) + this->table_name_.size() +
+                          sizeof(i32) + this->index_name_.size() + GetBaseSizeInBytes();
+        return total_size;
+    }
+    void WriteAdv(char *&buf) const override;
+    void Snapshot() override;
+    const String ToString() const override { return "AddTableIndexEntryOperation"; }
+
+public:
+    SharedPtr<TableIndexEntry> table_index_entry_{};
+
+private:
+    String db_name_{};
+    String table_name_{};
+    String index_name_{};
+    SharedPtr<IndexDef> index_def_{};
+    String index_dir_{};
+};
+
+/// class AddIrsIndexEntryOperation
+export class AddIrsIndexEntryOperation : public PhysicalWalOperation {
+public:
+    explicit AddIrsIndexEntryOperation(TxnTimeStamp begin_ts, bool is_delete, String db_name, String table_name, String index_name, String index_dir)
+        : PhysicalWalOperation(begin_ts, is_delete), db_name_(std::move(db_name)), table_name_(std::move(table_name)),
+          index_name_(std::move(index_name)), index_dir_(std::move(index_dir)) {}
+    explicit AddIrsIndexEntryOperation(SharedPtr<IrsIndexEntry> irs_index_entry)
+        : PhysicalWalOperation(PhysicalWalOperationType::ADD_IRS_INDEX_ENTRY), irs_index_entry_(irs_index_entry) {}
+    PhysicalWalOperationType GetType() override { return PhysicalWalOperationType::ADD_IRS_INDEX_ENTRY; }
+    auto operator==(const PhysicalWalOperation &other) const -> bool override {
+        const auto *other_cmd = dynamic_cast<const AddIrsIndexEntryOperation *>(&other);
+        return other_cmd != nullptr && IsEqual(db_name_, other_cmd->db_name_) && IsEqual(table_name_, other_cmd->table_name_) &&
+               IsEqual(index_name_, other_cmd->index_name_);
+    }
+    [[nodiscard]] SizeT GetSizeInBytes() const override {
+        auto total_size = sizeof(PhysicalWalOperationType) + sizeof(i32) + this->db_name_.size() + sizeof(i32) + this->table_name_.size() +
+                          sizeof(i32) + this->index_name_.size() + GetBaseSizeInBytes();
+        return total_size;
+    }
+    void WriteAdv(char *&buf) const override;
+    void Snapshot() override;
+    const String ToString() const override { return "AddIrsIndexEntryOperation"; }
+
+public:
+    SharedPtr<IrsIndexEntry> irs_index_entry_{};
+
+private:
+    String db_name_{};
+    String table_name_{};
+    String index_name_{};
+    String index_dir_{};
+};
+
+/// class AddColumnIndexEntryOperation
+export class AddColumnIndexEntryOperation : public PhysicalWalOperation {
+public:
+    explicit AddColumnIndexEntryOperation(TxnTimeStamp begin_ts, bool is_delete, String db_name, String table_name, String index_name, u64 column_id)
+        : PhysicalWalOperation(begin_ts, is_delete), db_name_(std::move(db_name)), table_name_(std::move(table_name)),
+          index_name_(std::move(index_name)), column_id_(column_id) {}
+    explicit AddColumnIndexEntryOperation(SharedPtr<ColumnIndexEntry> column_index_entry)
+        : PhysicalWalOperation(PhysicalWalOperationType::ADD_COLUMN_INDEX_ENTRY), column_index_entry_(column_index_entry) {}
+    PhysicalWalOperationType GetType() override { return PhysicalWalOperationType::ADD_COLUMN_INDEX_ENTRY; }
+    auto operator==(const PhysicalWalOperation &other) const -> bool override {
+        const auto *other_cmd = dynamic_cast<const AddColumnIndexEntryOperation *>(&other);
+        return other_cmd != nullptr && IsEqual(db_name_, other_cmd->db_name_) && IsEqual(table_name_, other_cmd->table_name_) &&
+               IsEqual(index_name_, other_cmd->index_name_) && column_id_ == other_cmd->column_id_;
+    }
+    [[nodiscard]] SizeT GetSizeInBytes() const override {
+        auto total_size = sizeof(PhysicalWalOperationType) + sizeof(i32) + this->db_name_.size() + sizeof(i32) + this->table_name_.size() +
+                          sizeof(i32) + this->index_name_.size() + sizeof(ColumnID) + GetBaseSizeInBytes();
+        return total_size;
+    }
+    void WriteAdv(char *&buf) const override;
+    void Snapshot() override;
+    const String ToString() const override { return "AddColumnIndexEntryOperation"; }
+
+public:
+    SharedPtr<ColumnIndexEntry> column_index_entry_{};
+
+private:
+    String db_name_{};
+    String table_name_{};
+    String index_name_{};
+    String col_index_dir_{};
+    ColumnID column_id_{};
+};
+
+/// class AddSegmentColumnEntryOperation
+export class AddSegmentColumnIndexEntryOperation : public PhysicalWalOperation {
+public:
+    explicit AddSegmentColumnIndexEntryOperation(TxnTimeStamp begin_ts,
+                                                 bool is_delete,
+                                                 String db_name,
+                                                 String table_name,
+                                                 String index_name,
+                                                 u64 column_id,
+                                                 u32 segment_id)
+        : PhysicalWalOperation(begin_ts, is_delete), db_name_(std::move(db_name)), table_name_(std::move(table_name)),
+          index_name_(std::move(index_name)), column_id_(column_id), segment_id_(segment_id) {}
+    explicit AddSegmentColumnIndexEntryOperation(SharedPtr<SegmentColumnIndexEntry> segment_column_index_entry)
+        : PhysicalWalOperation(PhysicalWalOperationType::ADD_SEGMENT_COLUMN_INDEX_ENTRY), segment_column_index_entry_(segment_column_index_entry) {}
+    PhysicalWalOperationType GetType() override { return PhysicalWalOperationType::ADD_SEGMENT_COLUMN_INDEX_ENTRY; }
+    auto operator==(const PhysicalWalOperation &other) const -> bool override {
+        const auto *other_cmd = dynamic_cast<const AddSegmentColumnIndexEntryOperation *>(&other);
+        return other_cmd != nullptr && IsEqual(db_name_, other_cmd->db_name_) && IsEqual(table_name_, other_cmd->table_name_) &&
+               IsEqual(index_name_, other_cmd->index_name_) && column_id_ == other_cmd->column_id_ && segment_id_ == other_cmd->segment_id_;
+    }
+    [[nodiscard]] SizeT GetSizeInBytes() const override {
+        auto total_size = sizeof(PhysicalWalOperationType) + sizeof(i32) + this->db_name_.size() + sizeof(i32) + this->table_name_.size() +
+                          sizeof(i32) + this->index_name_.size() + sizeof(ColumnID) + sizeof(SegmentID) + GetBaseSizeInBytes();
+        return total_size;
+    }
+    void WriteAdv(char *&buf) const override;
+    void Snapshot() override;
+    const String ToString() const override { return "AddSegmentColumnEntryOperation"; }
+
+public:
+    SharedPtr<SegmentColumnIndexEntry> segment_column_index_entry_{};
+
+private:
+    String db_name_{};
+    String table_name_{};
+    String index_name_{};
+    ColumnID column_id_{};
+    SegmentID segment_id_{};
+    TxnTimeStamp min_ts_{0};
+    TxnTimeStamp max_ts_{0};
 };
 
 /// class PhysicalWalEntryHeader

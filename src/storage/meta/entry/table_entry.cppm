@@ -143,7 +143,7 @@ public:
 public:
     u64 GetColumnIdByName(const String &column_name) const;
 
-    Map<u32, SharedPtr<SegmentEntry>> &segment_map() { return segment_map_; }
+    Map<SegmentID, SharedPtr<SegmentEntry>> &segment_map() { return segment_map_; }
 
     HashMap<String, UniquePtr<TableIndexMeta>> &index_meta_map() { return index_meta_map_; }
 
@@ -168,7 +168,7 @@ protected:
     SegmentEntry *unsealed_segment_{};
     atomic_u32 next_segment_id_{};
 
-    // Index definition
+    // Index meta
     HashMap<String, UniquePtr<TableIndexMeta>> index_meta_map_{};
 };
 

@@ -255,18 +255,18 @@ Tuple<DBEntry *, Status> DBMeta::DropNewEntry(TransactionID txn_id, TxnTimeStamp
         if (txn_id == header_db_entry->txn_id_) {
             // Same txn, remove the header db entry
             auto base_entry_ptr_iter = this->entry_list_.begin();
-            auto db_entry_ptr = std::dynamic_pointer_cast<DBEntry>(*base_entry_ptr_iter);
+            auto db_entry = std::dynamic_pointer_cast<DBEntry>(*base_entry_ptr_iter);
 
             // Physical log
             {
                 if (txn_mgr != nullptr) {
-                    auto operation = MakeUnique<AddDatabaseEntryOperation>(db_entry_ptr);
+                    auto operation = MakeUnique<AddDatabaseEntryOperation>(db_entry);
                     txn_mgr->GetTxn(txn_id)->AddPhysicalOperation(std::move(operation));
                 }
             }
 
             this->entry_list_.erase(this->entry_list_.begin());
-            return {db_entry_ptr.get(), Status::OK()};
+            return {db_entry.get(), Status::OK()};
         } else {
             // Not same txn, issue WW conflict
             UniquePtr<String> err_msg = MakeUnique<String>("Write-write conflict: There is another uncommitted db entry.");
@@ -293,6 +293,7 @@ void DBMeta::DeleteNewEntry(TransactionID txn_id, TxnManager * txn_mgr) {
         std::remove_if(this->entry_list_.begin(), this->entry_list_.end(), [&](auto &entry) -> bool { return entry->txn_id_ == txn_id; });
 
     // TODO Need to check whether or not adding physical operation log
+    // DeleteNewEntry is only called when txn is rollbacked, so no need to add physical log
     // Physical log
 //    {
 //        if (txn_mgr != nullptr) {

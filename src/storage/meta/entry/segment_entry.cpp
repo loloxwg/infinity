@@ -318,11 +318,12 @@ SharedPtr<SegmentColumnIndexEntry> SegmentEntry::CreateIndexFile(ColumnIndexEntr
                                                                  TxnTableStore *txn_store,
                                                                  bool prepare,
                                                                  bool is_replay) {
+    Txn *txn = txn_store->txn_;
     u64 column_id = column_def->id();
     const IndexBase *index_base = column_index_entry->index_base_ptr();
     UniquePtr<CreateIndexParam> create_index_param = SegmentEntry::GetCreateIndexParam(this->row_count_, index_base, column_def.get());
     auto segment_column_index_entry =
-        SegmentColumnIndexEntry::NewIndexEntry(column_index_entry, this->segment_id_, create_ts, buffer_mgr, create_index_param.get());
+        SegmentColumnIndexEntry::NewIndexEntry(column_index_entry, this->segment_id_, txn, create_ts, buffer_mgr, create_index_param.get());
     if (!is_replay) {
         WriteIndexToMemory(column_def, prepare, column_id, index_base, segment_column_index_entry);
     }

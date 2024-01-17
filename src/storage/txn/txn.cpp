@@ -467,14 +467,8 @@ void Txn::CommitBottom() {
     }
 
     // Snapshot the physical operations in one txn
-    Vector<UniquePtr<PhysicalWalOperation>> &operations = local_physical_wal_entry_->operations();
-    for (auto &operation : operations) {
-        String opt = operation->ToString();
-        LOG_INFO(fmt::format("PhysicalWalOperation: {}", opt));
+    local_physical_wal_entry_->Snapshot(txn_id_, commit_ts);
 
-        operation->Snapshot();
-    }
-    //    local_physical_wal_entry_->Snapshot(txn_id_, commit_ts);
     LOG_INFO(fmt::format("Txn: {} is committed.", txn_id_));
 
     // Notify the top half
