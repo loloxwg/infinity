@@ -12,10 +12,12 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-import infinity
-from infinity.common import NetworkAddress, REMOTE_HOST
-import common_values
 import pytest
+
+import common_values
+import infinity
+from infinity.common import REMOTE_HOST
+
 
 class TestDatabase:
 
@@ -44,29 +46,17 @@ class TestDatabase:
         infinity_obj = infinity.connect(REMOTE_HOST)
 
         # infinity
-        infinity_obj.drop_database("my_database", None)
         db = infinity_obj.create_database("my_database")
         assert db
 
-        try:
-            db = infinity_obj.create_database("my_database!@#")
-        except Exception as e:
-            print(e)
-
-        try:
-            db = infinity_obj.create_database("my-database-dash")
-        except Exception as e:
-            print(e)
-
-        try:
-            db = infinity_obj.create_database("123_database")
-        except Exception as e:
-            print(e)
-
-        try:
-            db = infinity_obj.create_database("")
-        except Exception as e:
-            print(e)
+        with pytest.raises(Exception):
+            infinity_obj.create_database("my_database!@#")
+        with pytest.raises(Exception):
+            infinity_obj.create_database("my-database-dash")
+        with pytest.raises(Exception):
+            infinity_obj.create_database("123_database")
+        with pytest.raises(Exception):
+            infinity_obj.create_database("")
 
         res = infinity_obj.list_databases()
         assert res is not None
@@ -79,9 +69,6 @@ class TestDatabase:
         res = infinity_obj.drop_database("my_database")
         assert res.success
 
-        # res = infinity_obj.drop_database("default")
-        # assert not res.success
-
         res = infinity_obj.list_databases()
         assert res.success
 
@@ -90,9 +77,7 @@ class TestDatabase:
 
         # disconnect
         res = infinity_obj.disconnect()
-
         assert res.success
-
 
     def test_create_database_invalid_name(self):
         """
@@ -122,9 +107,7 @@ class TestDatabase:
 
         assert res.success
 
-
     def test_create_drop_show_1K_databases(self):
-
         """
         create 1K dbs, show these dbs, drop these dbs
 
@@ -156,7 +139,7 @@ class TestDatabase:
         dbs = infinity_obj.list_databases()
         for db_name in dbs.db_names:
             print('db name: ' + db_name)
-        assert len( dbs.db_names) == (db_count + 1)
+        assert len(dbs.db_names) == (db_count + 1)
         # 4. drop 1m database
         for i in range(db_count):
             print('drop db_name' + str(i))
@@ -168,7 +151,6 @@ class TestDatabase:
 
     @pytest.mark.skip(reason="Cost too much times")
     def test_create_drop_show_1M_databases(self):
-
         """
         create 1M dbs, show these dbs, drop these dbs
 
@@ -215,7 +197,6 @@ class TestDatabase:
         assert res.success
 
     def test_repeatedly_create_drop_show_databases(self):
-
         """
         create db, show db and drop db, repeat above ops 100 times
 
@@ -244,7 +225,7 @@ class TestDatabase:
             dbs = infinity_obj.list_databases()
             for db_name in dbs.db_names:
                 assert db_name in ['my_db', 'default']
-            assert len( dbs.db_names) == 2
+            assert len(dbs.db_names) == 2
 
             # 2.3 drop database
             infinity_obj.drop_database('my_db')
@@ -253,7 +234,6 @@ class TestDatabase:
         res = infinity_obj.disconnect()
 
         assert res.success
-
 
     def test_drop_database_with_invalid_name(self):
         """
@@ -452,7 +432,6 @@ class TestDatabase:
             db = infinity_obj.get_database("my_database")
         except Exception as e:
             print(f'Caught exception: {e}')
-
 
         # 6. get dummy-db
         try:
